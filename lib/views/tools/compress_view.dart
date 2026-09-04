@@ -5,8 +5,7 @@ import 'package:scanner_app/providers/library_provider.dart';
 import 'package:scanner_app/providers/pdf_tools_provider.dart';
 import 'package:scanner_app/views/tools/widgets/pdf_document_selector.dart';
 import 'package:scanner_app/views/tools/widgets/pdf_tools_listener.dart';
-import 'package:scanner_app/views/widgets/loading_overlay.dart';
-import 'package:scanner_app/views/widgets/primary_button.dart';
+import 'package:scanner_app/views/tools/widgets/tool_screen_scaffold.dart';
 
 class CompressView extends ConsumerStatefulWidget {
   const CompressView({super.key});
@@ -29,50 +28,28 @@ class _CompressViewState extends ConsumerState<CompressView> {
             .toList() ??
         const <ScannedDocument>[];
 
-    return LoadingOverlay(
-      visible: busy,
-      message: 'Compressing…',
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Compress PDF'),
-        ),
-        body: Column(
-          children: <Widget>[
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                'Pages are rasterized and recompressed to reduce file size.',
-              ),
-            ),
-            Expanded(
-              child: PdfDocumentSelector(
-                documents: pdfs,
-                selectedIds:
-                    _selectedId == null ? const <String>{} : <String>{_selectedId!},
-                multiSelect: false,
-                onToggle: (ScannedDocument doc) {
-                  setState(() => _selectedId = doc.id);
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: PrimaryButton(
-                label: 'Compress',
-                onPressed: (_selectedId == null || busy)
-                    ? null
-                    : () {
-                        final ScannedDocument doc = pdfs.firstWhere(
-                          (ScannedDocument d) => d.id == _selectedId,
-                        );
-                        ref.read(pdfToolsNotifierProvider.notifier).compressPdf(
-                              pdfPath: doc.pdfPath!,
-                            );
-                      },
-              ),
-            ),
-          ],
-        ),
+    return ToolScreenScaffold(
+      title: 'Compress PDF',
+      subtitle: 'Reduce file size by recompressing page images.',
+      busy: busy,
+      busyMessage: 'Compressing…',
+      actionLabel: 'Compress',
+      actionEnabled: _selectedId != null,
+      onAction: () {
+        final ScannedDocument doc =
+            pdfs.firstWhere((ScannedDocument d) => d.id == _selectedId);
+        ref.read(pdfToolsNotifierProvider.notifier).compressPdf(
+              pdfPath: doc.pdfPath!,
+            );
+      },
+      body: PdfDocumentSelector(
+        documents: pdfs,
+        selectedIds:
+            _selectedId == null ? const <String>{} : <String>{_selectedId!},
+        multiSelect: false,
+        onToggle: (ScannedDocument doc) {
+          setState(() => _selectedId = doc.id);
+        },
       ),
     );
   }

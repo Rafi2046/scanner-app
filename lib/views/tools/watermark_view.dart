@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/models/scanned_document.dart';
 import 'package:scanner_app/providers/library_provider.dart';
 import 'package:scanner_app/providers/pdf_tools_provider.dart';
+import 'package:scanner_app/views/tools/widgets/app_text_field.dart';
 import 'package:scanner_app/views/tools/widgets/pdf_document_selector.dart';
 import 'package:scanner_app/views/tools/widgets/pdf_tools_listener.dart';
-import 'package:scanner_app/views/widgets/loading_overlay.dart';
-import 'package:scanner_app/views/widgets/primary_button.dart';
+import 'package:scanner_app/views/tools/widgets/tool_screen_scaffold.dart';
 
 class WatermarkView extends ConsumerStatefulWidget {
   const WatermarkView({super.key});
@@ -38,62 +39,47 @@ class _WatermarkViewState extends ConsumerState<WatermarkView> {
             .toList() ??
         const <ScannedDocument>[];
 
-    return LoadingOverlay(
-      visible: busy,
-      message: 'Adding watermark…',
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Watermark'),
-        ),
-        body: Column(
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: TextField(
-                controller: _textController,
-                decoration: const InputDecoration(
-                  labelText: 'Watermark text',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+    return ToolScreenScaffold(
+      title: 'Add Watermark',
+      subtitle: 'Text is stamped diagonally across every page.',
+      busy: busy,
+      busyMessage: 'Adding watermark…',
+      actionLabel: 'Apply Watermark',
+      actionEnabled: _selectedId != null && _textController.text.trim().isNotEmpty,
+      onAction: () {
+        final ScannedDocument doc =
+            pdfs.firstWhere((ScannedDocument d) => d.id == _selectedId);
+        ref.read(pdfToolsNotifierProvider.notifier).addWatermark(
+              pdfPath: doc.pdfPath!,
+              text: _textController.text,
+            );
+      },
+      body: Column(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppConstants.pagePadding,
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Choose a PDF'),
-              ),
+            child: AppTextField(
+              controller: _textController,
+              label: 'Your text',
+              onChanged: (_) => setState(() {}),
             ),
-            Expanded(
-              child: PdfDocumentSelector(
-                documents: pdfs,
-                selectedIds:
-                    _selectedId == null ? const <String>{} : <String>{_selectedId!},
-                multiSelect: false,
-                onToggle: (ScannedDocument doc) {
-                  setState(() => _selectedId = doc.id);
-                },
-              ),
+          ),
+          const SizedBox(height: AppConstants.spaceMd),
+          Expanded(
+            child: PdfDocumentSelector(
+              documents: pdfs,
+              selectedIds: _selectedId == null
+                  ? const <String>{}
+                  : <String>{_selectedId!},
+              multiSelect: false,
+              onToggle: (ScannedDocument doc) {
+                setState(() => _selectedId = doc.id);
+              },
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: PrimaryButton(
-                label: 'Apply Watermark',
-                onPressed: (_selectedId == null || busy)
-                    ? null
-                    : () {
-                        final ScannedDocument doc = pdfs.firstWhere(
-                          (ScannedDocument d) => d.id == _selectedId,
-                        );
-                        ref.read(pdfToolsNotifierProvider.notifier).addWatermark(
-                              pdfPath: doc.pdfPath!,
-                              text: _textController.text,
-                            );
-                      },
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

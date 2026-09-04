@@ -2,14 +2,16 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scanner_app/app/theme.dart';
+import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/models/scanned_document.dart';
 import 'package:scanner_app/providers/library_provider.dart';
 import 'package:scanner_app/providers/pdf_tools_provider.dart';
+import 'package:scanner_app/views/tools/widgets/app_text_field.dart';
 import 'package:scanner_app/views/tools/widgets/pdf_document_selector.dart';
 import 'package:scanner_app/views/tools/widgets/pdf_tools_listener.dart';
 import 'package:scanner_app/views/tools/widgets/signature_pad.dart';
-import 'package:scanner_app/views/widgets/loading_overlay.dart';
-import 'package:scanner_app/views/widgets/primary_button.dart';
+import 'package:scanner_app/views/tools/widgets/tool_screen_scaffold.dart';
 import 'package:signature/signature.dart';
 
 class SignatureView extends ConsumerStatefulWidget {
@@ -22,7 +24,7 @@ class SignatureView extends ConsumerStatefulWidget {
 class _SignatureViewState extends ConsumerState<SignatureView> {
   final SignatureController _controller = SignatureController(
     penStrokeWidth: 3,
-    penColor: Colors.black,
+    penColor: AppTheme.textPrimary,
     exportBackgroundColor: Colors.transparent,
   );
   final TextEditingController _pageController = TextEditingController(text: '1');
@@ -46,59 +48,48 @@ class _SignatureViewState extends ConsumerState<SignatureView> {
             .toList() ??
         const <ScannedDocument>[];
 
-    return LoadingOverlay(
-      visible: busy,
-      message: 'Stamping signature…',
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Sign PDF'),
-        ),
-        body: Column(
-          children: <Widget>[
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Draw your signature, then pick a PDF and page.'),
-              ),
+    return ToolScreenScaffold(
+      title: 'eSign PDF',
+      subtitle: 'Draw a signature, choose a PDF, then stamp it.',
+      busy: busy,
+      busyMessage: 'Stamping signature…',
+      actionLabel: 'Stamp Signature',
+      actionEnabled: _selectedId != null,
+      onAction: () => _stamp(pdfs),
+      body: Column(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppConstants.pagePadding,
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SignaturePad(controller: _controller),
+            child: SignaturePad(controller: _controller),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppConstants.pagePadding,
+              AppConstants.spaceSm,
+              AppConstants.pagePadding,
+              AppConstants.spaceMd,
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: TextField(
-                controller: _pageController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Page number',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+            child: AppTextField(
+              controller: _pageController,
+              label: 'Page number',
+              keyboardType: TextInputType.number,
             ),
-            Expanded(
-              child: PdfDocumentSelector(
-                documents: pdfs,
-                selectedIds:
-                    _selectedId == null ? const <String>{} : <String>{_selectedId!},
-                multiSelect: false,
-                onToggle: (ScannedDocument doc) {
-                  setState(() => _selectedId = doc.id);
-                },
-              ),
+          ),
+          Expanded(
+            child: PdfDocumentSelector(
+              documents: pdfs,
+              selectedIds: _selectedId == null
+                  ? const <String>{}
+                  : <String>{_selectedId!},
+              multiSelect: false,
+              onToggle: (ScannedDocument doc) {
+                setState(() => _selectedId = doc.id);
+              },
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: PrimaryButton(
-                label: 'Stamp Signature',
-                onPressed: (_selectedId == null || busy)
-                    ? null
-                    : () => _stamp(pdfs),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -115,9 +106,8 @@ class _SignatureViewState extends ConsumerState<SignatureView> {
       return;
     }
 
-    final ScannedDocument doc = pdfs.firstWhere(
-      (ScannedDocument d) => d.id == _selectedId,
-    );
+    final ScannedDocument doc =
+        pdfs.firstWhere((ScannedDocument d) => d.id == _selectedId);
     final int page = int.tryParse(_pageController.text.trim()) ?? 1;
     await ref.read(pdfToolsNotifierProvider.notifier).addSignature(
           pdfPath: doc.pdfPath!,

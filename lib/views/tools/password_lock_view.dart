@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/models/scanned_document.dart';
 import 'package:scanner_app/providers/library_provider.dart';
 import 'package:scanner_app/providers/pdf_tools_provider.dart';
+import 'package:scanner_app/views/tools/widgets/app_text_field.dart';
 import 'package:scanner_app/views/tools/widgets/pdf_document_selector.dart';
 import 'package:scanner_app/views/tools/widgets/pdf_tools_listener.dart';
-import 'package:scanner_app/views/widgets/loading_overlay.dart';
-import 'package:scanner_app/views/widgets/primary_button.dart';
+import 'package:scanner_app/views/tools/widgets/tool_screen_scaffold.dart';
 
 class PasswordLockView extends ConsumerStatefulWidget {
   const PasswordLockView({super.key});
@@ -37,69 +38,54 @@ class _PasswordLockViewState extends ConsumerState<PasswordLockView> {
             .toList() ??
         const <ScannedDocument>[];
 
-    return LoadingOverlay(
-      visible: busy,
-      message: 'Encrypting…',
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Password Lock'),
-        ),
-        body: Column(
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: TextField(
-                controller: _passwordController,
-                obscureText: _obscure,
-                decoration: InputDecoration(
-                  labelText: 'Password (min 4 characters)',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                    icon: Icon(
-                      _obscure ? Icons.visibility : Icons.visibility_off,
-                    ),
-                  ),
+    return ToolScreenScaffold(
+      title: 'Protect PDF',
+      subtitle: 'Encrypt the file with a password (min 4 characters).',
+      busy: busy,
+      busyMessage: 'Encrypting…',
+      actionLabel: 'Protect',
+      actionEnabled:
+          _selectedId != null && _passwordController.text.trim().length >= 4,
+      onAction: () {
+        final ScannedDocument doc =
+            pdfs.firstWhere((ScannedDocument d) => d.id == _selectedId);
+        ref.read(pdfToolsNotifierProvider.notifier).lockPdf(
+              pdfPath: doc.pdfPath!,
+              password: _passwordController.text,
+            );
+      },
+      body: Column(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppConstants.pagePadding,
+            ),
+            child: AppTextField(
+              controller: _passwordController,
+              label: 'Password',
+              obscureText: _obscure,
+              suffix: IconButton(
+                onPressed: () => setState(() => _obscure = !_obscure),
+                icon: Icon(
+                  _obscure ? Icons.visibility_outlined : Icons.visibility_off,
                 ),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Choose a PDF'),
-              ),
+          ),
+          const SizedBox(height: AppConstants.spaceMd),
+          Expanded(
+            child: PdfDocumentSelector(
+              documents: pdfs,
+              selectedIds: _selectedId == null
+                  ? const <String>{}
+                  : <String>{_selectedId!},
+              multiSelect: false,
+              onToggle: (ScannedDocument doc) {
+                setState(() => _selectedId = doc.id);
+              },
             ),
-            Expanded(
-              child: PdfDocumentSelector(
-                documents: pdfs,
-                selectedIds:
-                    _selectedId == null ? const <String>{} : <String>{_selectedId!},
-                multiSelect: false,
-                onToggle: (ScannedDocument doc) {
-                  setState(() => _selectedId = doc.id);
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: PrimaryButton(
-                label: 'Lock PDF',
-                onPressed: (_selectedId == null || busy)
-                    ? null
-                    : () {
-                        final ScannedDocument doc = pdfs.firstWhere(
-                          (ScannedDocument d) => d.id == _selectedId,
-                        );
-                        ref.read(pdfToolsNotifierProvider.notifier).lockPdf(
-                              pdfPath: doc.pdfPath!,
-                              password: _passwordController.text,
-                            );
-                      },
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

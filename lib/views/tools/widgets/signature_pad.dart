@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:scanner_app/app/theme.dart';
+import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:signature/signature.dart';
 
 class SignaturePad extends StatelessWidget {
@@ -11,23 +13,22 @@ class SignaturePad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         DecoratedBox(
           decoration: BoxDecoration(
-            border: Border.all(color: colors.outlineVariant),
-            borderRadius: const BorderRadius.all(Radius.circular(12)),
+            color: AppTheme.surfaceColor,
+            borderRadius: BorderRadius.circular(AppConstants.radiusLg),
+            border: Border.all(color: AppTheme.cardBorder),
           ),
           child: ClipRRect(
-            borderRadius: const BorderRadius.all(Radius.circular(12)),
+            borderRadius: BorderRadius.circular(AppConstants.radiusLg),
             child: SizedBox(
               height: 160,
               child: Signature(
                 controller: controller,
-                backgroundColor: colors.surface,
+                backgroundColor: AppTheme.surfaceColor,
               ),
             ),
           ),
