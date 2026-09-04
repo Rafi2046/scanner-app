@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:scanner_app/app/theme.dart';
+import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/views/home/widgets/tool_circle_item.dart';
-import 'package:scanner_app/views/home/widgets/tools_ai_banner.dart';
+import 'package:scanner_app/views/home/widgets/tools_section_card.dart';
 
-/// Tab 2: Categorized Tools Hub view.
+/// Tab 2: Tools hub with pastel shortcuts.
 class ToolsTabView extends StatelessWidget {
   const ToolsTabView({
     super.key,
@@ -33,123 +34,94 @@ class ToolsTabView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 100),
+      padding: const EdgeInsets.fromLTRB(
+        AppConstants.pagePadding,
+        AppConstants.spaceLg,
+        AppConstants.pagePadding,
+        AppConstants.bottomNavClearance,
+      ),
       children: <Widget>[
         const Text(
-          'Tools Hub',
+          'All Tools',
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w800,
             color: AppTheme.textPrimary,
-            letterSpacing: -0.4,
           ),
         ),
-        const SizedBox(height: 14),
-        ToolsAiBanner(onTap: onSmartScan),
-        const SizedBox(height: 20),
-        _buildSectionHeader('Scan & Capture'),
-        const SizedBox(height: 12),
-        _buildGrid(<Widget>[
-          ToolCircleItem(
-            icon: Icons.document_scanner_rounded,
-            label: 'Smart Scan',
-            color: AppTheme.primaryMint,
-            tag: 'HD',
-            onTap: onSmartScan,
-          ),
-          ToolCircleItem(
-            icon: Icons.badge_outlined,
-            label: 'ID Cards',
-            color: const Color(0xFF38BDF8),
-            tag: '2-IN-1',
-            onTap: onIdCard,
-          ),
-          ToolCircleItem(
-            icon: Icons.text_fields_rounded,
-            label: 'Extract Text',
-            color: const Color(0xFF34D399),
-            tag: 'AI',
-            onTap: onOcr,
-          ),
-          ToolCircleItem(
-            icon: Icons.branding_watermark_outlined,
-            label: 'Watermark',
-            color: const Color(0xFF2DD4BF),
-            onTap: onWatermark,
-          ),
-        ]),
-        const SizedBox(height: 24),
-        _buildSectionHeader('PDF & Utilities'),
-        const SizedBox(height: 12),
-        _buildGrid(<Widget>[
-          ToolCircleItem(
-            icon: Icons.call_merge_rounded,
-            label: 'Merge PDF',
-            color: const Color(0xFFFBBF24),
-            onTap: onMergePdf,
-          ),
-          ToolCircleItem(
-            icon: Icons.compress_rounded,
-            label: 'Compress',
-            color: const Color(0xFFFB923C),
-            onTap: onCompress,
-          ),
-          ToolCircleItem(
-            icon: Icons.draw_outlined,
-            label: 'Sign PDF',
-            color: const Color(0xFFA78BFA),
-            onTap: onSign,
-          ),
-          ToolCircleItem(
-            icon: Icons.lock_outline_rounded,
-            label: 'Password',
-            color: const Color(0xFFF43F5E),
-            onTap: onPasswordLock,
-          ),
-          ToolCircleItem(
-            icon: Icons.image_outlined,
-            label: 'To Image',
-            color: const Color(0xFF818CF8),
-            onTap: onPdfToImage,
-          ),
-          ToolCircleItem(
-            icon: Icons.file_upload_outlined,
-            label: 'Import',
-            color: const Color(0xFF60A5FA),
-            onTap: onImport,
-          ),
-        ]),
+        const SizedBox(height: AppConstants.spaceLg),
+        ToolsSectionCard(
+          title: 'Scan & Capture',
+          children: <Widget>[
+            ToolCircleItem(
+              icon: Icons.document_scanner_rounded,
+              label: 'Smart Scan',
+              color: AppTheme.accentOrange,
+              onTap: onSmartScan,
+            ),
+            ToolCircleItem(
+              icon: Icons.badge_outlined,
+              label: 'ID Card',
+              color: AppTheme.accentBrown,
+              onTap: onIdCard,
+            ),
+            ToolCircleItem(
+              icon: Icons.text_fields_rounded,
+              label: 'OCR',
+              color: AppTheme.accentGold,
+              onTap: onOcr,
+            ),
+            ToolCircleItem(
+              icon: Icons.file_upload_outlined,
+              label: 'Import',
+              color: AppTheme.accentBlue,
+              onTap: onImport,
+            ),
+          ],
+        ),
+        const SizedBox(height: AppConstants.spaceLg),
+        ToolsSectionCard(
+          title: 'PDF Tools',
+          children: <Widget>[
+            ToolCircleItem(
+              icon: Icons.call_merge_rounded,
+              label: 'Merge',
+              color: AppTheme.accentPink,
+              onTap: onMergePdf,
+            ),
+            ToolCircleItem(
+              icon: Icons.branding_watermark_outlined,
+              label: 'Watermark',
+              color: AppTheme.accentPurple,
+              onTap: onWatermark,
+            ),
+            ToolCircleItem(
+              icon: Icons.draw_outlined,
+              label: 'Sign',
+              color: AppTheme.accentRed,
+              onTap: onSign,
+            ),
+            ToolCircleItem(
+              icon: Icons.lock_outline_rounded,
+              label: 'Protect',
+              color: AppTheme.accentTeal,
+              onTap: onPasswordLock,
+            ),
+            ToolCircleItem(
+              icon: Icons.compress_rounded,
+              label: 'Compress',
+              color: AppTheme.accentGold,
+              onTap: onCompress,
+            ),
+            ToolCircleItem(
+              icon: Icons.image_outlined,
+              label: 'To Image',
+              color: AppTheme.accentBlue,
+              onTap: onPdfToImage,
+            ),
+          ],
+        ),
       ],
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-        color: AppTheme.textSecondary,
-      ),
-    );
-  }
-
-  Widget _buildGrid(List<Widget> children) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.cardBorder),
-      ),
-      child: Wrap(
-        alignment: WrapAlignment.start,
-        spacing: 12,
-        runSpacing: 14,
-        children: children
-            .map((Widget w) => SizedBox(width: 74, child: w))
-            .toList(),
-      ),
     );
   }
 }

@@ -1,5 +1,9 @@
-/// App-wide path and limit constants.
+/// App-wide storage, limits, and UI design tokens.
 abstract final class AppConstants {
+  // --- Brand ---
+  static const String appName = 'Scanner';
+
+  // --- Storage ---
   static const String scansDirName = 'scans';
   static const String idCardsDirName = 'id_cards';
   static const String importsDirName = 'imports';
@@ -7,20 +11,37 @@ abstract final class AppConstants {
   static const String foldersDirName = 'folders';
   static const String indexFileName = 'library_index.json';
 
-  /// Max pages for a multi-page document scan session.
+  // --- Scan / PDF ---
   static const int documentPageLimit = 20;
-
-  /// ID card scan: one page per side.
   static const int idCardPageLimit = 1;
-
-  /// Default PDF page margins in points (1/72 inch).
   static const double pdfMarginPoints = 36;
-
   static const String biometricLockPrefsKey = 'biometric_lock_enabled';
-
-  /// JPEG quality used when compressing rasterized PDF pages.
   static const int compressJpegQuality = 40;
-
-  /// Longest edge in pixels for compressed/rebuild pages.
   static const int compressMaxEdge = 1280;
+
+  // --- Layout spacing ---
+  static const double spaceXs = 4;
+  static const double spaceSm = 8;
+  static const double spaceMd = 12;
+  static const double spaceLg = 16;
+  static const double spaceXl = 20;
+  static const double spaceXxl = 24;
+  static const double pagePadding = 18;
+  static const double bottomNavClearance = 100;
+
+  // --- Radii ---
+  static const double radiusSm = 8;
+  static const double radiusMd = 12;
+  static const double radiusLg = 16;
+  static const double radiusXl = 20;
+  static const double radiusPill = 28;
+
+  // --- Component sizes ---
+  static const double toolCircleSize = 52;
+  static const double toolIconSize = 24;
+  static const double thumbWidth = 52;
+  static const double thumbHeight = 64;
+  static const double fabSize = 58;
+  static const double bottomBarHeight = 64;
+  static const double logoSize = 36;
 }

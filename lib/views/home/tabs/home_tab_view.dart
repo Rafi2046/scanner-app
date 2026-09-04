@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scanner_app/app/theme.dart';
+import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/models/scanned_document.dart';
 import 'package:scanner_app/views/home/widgets/home_document_list.dart';
 import 'package:scanner_app/views/home/widgets/home_header.dart';
 import 'package:scanner_app/views/home/widgets/home_quick_tools.dart';
 import 'package:scanner_app/views/home/widgets/modern_empty_state.dart';
-import 'package:scanner_app/views/home/widgets/recent_doc_action_strip.dart';
+import 'package:scanner_app/views/home/widgets/recent_files_header.dart';
 import 'package:scanner_app/views/widgets/error_banner.dart';
 
-/// Tab 0: Home Dashboard view.
+/// Tab 0: clean Home dashboard.
 class HomeTabView extends StatelessWidget {
   const HomeTabView({
     super.key,
@@ -23,6 +24,9 @@ class HomeTabView extends StatelessWidget {
     required this.onIdCard,
     required this.onOcr,
     required this.onMergePdf,
+    required this.onWatermark,
+    required this.onSign,
+    required this.onProtect,
     required this.onAllTools,
     required this.onDelete,
     required this.onRefresh,
@@ -38,6 +42,9 @@ class HomeTabView extends StatelessWidget {
   final VoidCallback onIdCard;
   final VoidCallback onOcr;
   final VoidCallback onMergePdf;
+  final VoidCallback onWatermark;
+  final VoidCallback onSign;
+  final VoidCallback onProtect;
   final VoidCallback onAllTools;
   final ValueChanged<String> onDelete;
   final Future<void> Function() onRefresh;
@@ -45,132 +52,113 @@ class HomeTabView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
-      color: AppTheme.primaryMint,
+      color: AppTheme.primary,
       onRefresh: onRefresh,
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: <Widget>[
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  HomeHeader(
-                    searchController: searchController,
-                    onSearchChanged: onSearchChanged,
-                    onOpenSettings: onOpenSettings,
-                  ),
-                  const SizedBox(height: 16),
-                  HomeQuickTools(
-                    onSmartScan: onScanDocument,
-                    onIdCard: onIdCard,
-                    onOcr: onOcr,
-                    onMergePdf: onMergePdf,
-                    onAllTools: onAllTools,
-                  ),
-                  const SizedBox(height: 22),
-                  // Recent Documents Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      const Text(
-                        'Recent Documents',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textPrimary,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      library.maybeWhen(
-                        data: (List<ScannedDocument> docs) => docs.isNotEmpty
-                            ? Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.surfaceColor,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: AppTheme.cardBorder),
-                                ),
-                                child: Text(
-                                  '${docs.length}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppTheme.primaryMint,
-                                  ),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                        orElse: () => const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppConstants.pagePadding,
+              AppConstants.spaceMd,
+              AppConstants.pagePadding,
+              0,
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: library.when(
-                loading: () => const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
-                    child: CircularProgressIndicator(
-                      color: AppTheme.primaryMint,
-                    ),
-                  ),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate(<Widget>[
+                HomeHeader(
+                  searchController: searchController,
+                  onSearchChanged: onSearchChanged,
+                  onOpenSettings: onOpenSettings,
                 ),
-                error: (Object error, StackTrace stackTrace) =>
-                    ErrorBanner.fromError(
-                  error: error,
-                  onRetry: onRefresh,
+                const SizedBox(height: AppConstants.spaceLg),
+                HomeQuickTools(
+                  onSmartScan: onScanDocument,
+                  onIdCard: onIdCard,
+                  onOcr: onOcr,
+                  onMergePdf: onMergePdf,
+                  onWatermark: onWatermark,
+                  onSign: onSign,
+                  onProtect: onProtect,
+                  onAllTools: onAllTools,
                 ),
-                data: (List<ScannedDocument> documents) {
-                  final List<ScannedDocument> filteredDocs = searchQuery.isEmpty
-                      ? documents
-                      : documents
-                          .where((d) => d.title.toLowerCase().contains(searchQuery))
-                          .toList();
-
-                  if (documents.isEmpty) {
-                    return ModernEmptyState(onScan: onScanDocument);
-                  }
-                  if (filteredDocs.isEmpty) {
-                    return ModernEmptyState(
-                      title: 'No matching documents',
-                      subtitle: 'No documents match "$searchQuery".',
-                    );
-                  }
-
-                  return Column(
-                    children: <Widget>[
-                      RecentDocActionStrip(
-                        onShare: () {},
-                        onOcr: onOcr,
-                        onView: () {},
-                      ),
-                      HomeDocumentList(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        documents: filteredDocs,
-                        onDelete: onDelete,
-                      ),
-                      const SizedBox(height: 100),
-                    ],
-                  );
-                },
-              ),
+                const SizedBox(height: AppConstants.spaceXl),
+                RecentFilesHeader(
+                  count: library.valueOrNull?.length,
+                  onSeeAll: onAllTools,
+                ),
+                const SizedBox(height: AppConstants.spaceMd),
+                _LibraryBody(
+                  library: library,
+                  searchQuery: searchQuery,
+                  onScanDocument: onScanDocument,
+                  onDelete: onDelete,
+                  onRefresh: onRefresh,
+                ),
+                const SizedBox(height: AppConstants.bottomNavClearance),
+              ]),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LibraryBody extends StatelessWidget {
+  const _LibraryBody({
+    required this.library,
+    required this.searchQuery,
+    required this.onScanDocument,
+    required this.onDelete,
+    required this.onRefresh,
+  });
+
+  final AsyncValue<List<ScannedDocument>> library;
+  final String searchQuery;
+  final VoidCallback onScanDocument;
+  final ValueChanged<String> onDelete;
+  final Future<void> Function() onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return library.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 40),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (Object error, StackTrace _) => ErrorBanner.fromError(
+        error: error,
+        onRetry: onRefresh,
+      ),
+      data: (List<ScannedDocument> documents) {
+        final List<ScannedDocument> filtered = searchQuery.isEmpty
+            ? documents
+            : documents
+                .where(
+                  (ScannedDocument d) =>
+                      d.title.toLowerCase().contains(searchQuery),
+                )
+                .toList();
+
+        if (documents.isEmpty) {
+          return ModernEmptyState(onScan: onScanDocument);
+        }
+        if (filtered.isEmpty) {
+          return ModernEmptyState(
+            title: 'No matching files',
+            subtitle: 'Nothing matched "$searchQuery".',
+          );
+        }
+
+        return HomeDocumentList(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          documents: filtered,
+          onDelete: onDelete,
+        );
+      },
     );
   }
 }

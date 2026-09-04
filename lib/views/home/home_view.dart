@@ -22,7 +22,7 @@ import 'package:scanner_app/views/tools/watermark_view.dart';
 import 'package:scanner_app/views/widgets/error_snackbar.dart';
 import 'package:scanner_app/views/widgets/loading_overlay.dart';
 
-/// Main Shell holding the 4-tab workflow with center elevated camera action.
+/// 4-tab shell with center camera FAB.
 class HomeView extends ConsumerStatefulWidget {
   const HomeView({super.key});
 
@@ -79,6 +79,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
                 onIdCard: () => _push(const IdCardScanView()),
                 onOcr: () => _push(const OcrResultView()),
                 onMergePdf: () => _push(const MergePdfView()),
+                onWatermark: () => _push(const WatermarkView()),
+                onSign: () => _push(const SignatureView()),
+                onProtect: () => _push(const PasswordLockView()),
                 onAllTools: () => setState(() => _selectedTab = 2),
                 onDelete: (String id) => ref
                     .read(libraryNotifierProvider.notifier)

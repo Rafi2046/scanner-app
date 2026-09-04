@@ -13,7 +13,7 @@ class ScannerApp extends ConsumerWidget {
     final bool locked = ref.watch(authNotifierProvider).isLocked;
 
     return MaterialApp(
-      title: 'Scanner App',
+      title: 'Scanner',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       builder: (BuildContext context, Widget? child) {
