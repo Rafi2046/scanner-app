@@ -1,26 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:scanner_app/models/scanned_document.dart';
-import 'package:scanner_app/views/home/widgets/document_list_tile.dart';
+import 'package:scanner_app/views/home/widgets/modern_document_card.dart';
 
 class HomeDocumentList extends StatelessWidget {
   const HomeDocumentList({
     super.key,
     required this.documents,
     required this.onDelete,
+    this.physics,
+    this.shrinkWrap = false,
+    this.padding = const EdgeInsets.only(bottom: 88),
   });
 
   final List<ScannedDocument> documents;
   final ValueChanged<String> onDelete;
+  final ScrollPhysics? physics;
+  final bool shrinkWrap;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 88),
+    return ListView.builder(
+      padding: padding,
+      physics: physics,
+      shrinkWrap: shrinkWrap,
       itemCount: documents.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (BuildContext context, int index) {
         final ScannedDocument document = documents[index];
-        return DocumentListTile(
+        return ModernDocumentCard(
           document: document,
           onDelete: () => onDelete(document.id),
         );
@@ -28,3 +35,4 @@ class HomeDocumentList extends StatelessWidget {
     );
   }
 }
+

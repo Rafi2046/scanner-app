@@ -1,24 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scanner_app/app/theme.dart';
 import 'package:scanner_app/models/scanned_document.dart';
 import 'package:scanner_app/providers/document_scan_provider.dart';
 import 'package:scanner_app/providers/library_provider.dart';
-import 'package:scanner_app/views/home/widgets/home_drawer.dart';
-import 'package:scanner_app/views/home/widgets/empty_library_state.dart';
-import 'package:scanner_app/views/home/widgets/home_document_list.dart';
-import 'package:scanner_app/views/home/widgets/home_scan_bar.dart';
+import 'package:scanner_app/providers/pdf_tools_provider.dart';
+import 'package:scanner_app/views/home/tabs/files_tab_view.dart';
+import 'package:scanner_app/views/home/tabs/home_tab_view.dart';
+import 'package:scanner_app/views/home/tabs/me_tab_view.dart';
+import 'package:scanner_app/views/home/tabs/tools_tab_view.dart';
+import 'package:scanner_app/views/home/widgets/center_camera_fab.dart';
+import 'package:scanner_app/views/home/widgets/main_bottom_bar.dart';
 import 'package:scanner_app/views/id_card_scan/id_card_scan_view.dart';
-import 'package:scanner_app/views/tools/tools_hub_view.dart';
-import 'package:scanner_app/views/widgets/error_banner.dart';
+import 'package:scanner_app/views/ocr/ocr_result_view.dart';
+import 'package:scanner_app/views/tools/compress_view.dart';
+import 'package:scanner_app/views/tools/merge_pdf_view.dart';
+import 'package:scanner_app/views/tools/password_lock_view.dart';
+import 'package:scanner_app/views/tools/pdf_to_image_view.dart';
+import 'package:scanner_app/views/tools/signature_view.dart';
+import 'package:scanner_app/views/tools/watermark_view.dart';
 import 'package:scanner_app/views/widgets/error_snackbar.dart';
 import 'package:scanner_app/views/widgets/loading_overlay.dart';
 
-/// Library dashboard — Recents + scan entry points (Milestone 1).
-class HomeView extends ConsumerWidget {
+/// Main Shell holding the 4-tab workflow with center elevated camera action.
+class HomeView extends ConsumerStatefulWidget {
   const HomeView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeView> createState() => _HomeViewState();
+}
+
+class _HomeViewState extends ConsumerState<HomeView> {
+  int _selectedTab = 0;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _push(Widget page) {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     listenAsyncError(ref, libraryNotifierProvider, context);
     listenAsyncError(ref, documentScanNotifierProvider, context);
 
@@ -30,66 +58,77 @@ class HomeView extends ConsumerWidget {
       visible: scanning,
       message: 'Scanning…',
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Scanner'),
-          actions: <Widget>[
-            IconButton(
-              tooltip: 'Tools',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ToolsHubView(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.grid_view_outlined),
-            ),
-          ],
-        ),
-        drawer: const HomeDrawer(),
+        backgroundColor: AppTheme.scaffoldBg,
+        extendBody: true,
         body: SafeArea(
-          child: library.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (Object error, StackTrace stackTrace) => ErrorBanner.fromError(
-              error: error,
-              onRetry: () =>
-                  ref.read(libraryNotifierProvider.notifier).loadLibrary(),
-            ),
-            data: (List<ScannedDocument> documents) {
-              if (documents.isEmpty) {
-                return const EmptyLibraryState();
-              }
-              return HomeDocumentList(
-                documents: documents,
+          bottom: false,
+          child: IndexedStack(
+            index: _selectedTab,
+            children: <Widget>[
+              HomeTabView(
+                library: library,
+                scanning: scanning,
+                searchQuery: _searchQuery,
+                searchController: _searchController,
+                onSearchChanged: (String q) =>
+                    setState(() => _searchQuery = q.trim().toLowerCase()),
+                onOpenSettings: () => setState(() => _selectedTab = 3),
+                onScanDocument: () => ref
+                    .read(documentScanNotifierProvider.notifier)
+                    .startDocumentScan(),
+                onIdCard: () => _push(const IdCardScanView()),
+                onOcr: () => _push(const OcrResultView()),
+                onMergePdf: () => _push(const MergePdfView()),
+                onAllTools: () => setState(() => _selectedTab = 2),
                 onDelete: (String id) => ref
                     .read(libraryNotifierProvider.notifier)
                     .deleteDocument(id),
-              );
-            },
+                onRefresh: () =>
+                    ref.read(libraryNotifierProvider.notifier).loadLibrary(),
+              ),
+              FilesTabView(
+                library: library,
+                onImport: () =>
+                    ref.read(pdfToolsNotifierProvider.notifier).importFiles(),
+                onIdScan: () => _push(const IdCardScanView()),
+                onMerge: () => _push(const MergePdfView()),
+                onDelete: (String id) => ref
+                    .read(libraryNotifierProvider.notifier)
+                    .deleteDocument(id),
+                onRefresh: () =>
+                    ref.read(libraryNotifierProvider.notifier).loadLibrary(),
+              ),
+              ToolsTabView(
+                onSmartScan: () => ref
+                    .read(documentScanNotifierProvider.notifier)
+                    .startDocumentScan(),
+                onIdCard: () => _push(const IdCardScanView()),
+                onOcr: () => _push(const OcrResultView()),
+                onMergePdf: () => _push(const MergePdfView()),
+                onWatermark: () => _push(const WatermarkView()),
+                onSign: () => _push(const SignatureView()),
+                onPasswordLock: () => _push(const PasswordLockView()),
+                onCompress: () => _push(const CompressView()),
+                onPdfToImage: () => _push(const PdfToImageView()),
+                onImport: () =>
+                    ref.read(pdfToolsNotifierProvider.notifier).importFiles(),
+              ),
+              const MeTabView(),
+            ],
           ),
         ),
-        floatingActionButton: FloatingActionButton(
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        floatingActionButton: CenterCameraFab(
+          enabled: !scanning,
           onPressed: scanning
               ? null
               : () => ref
                   .read(documentScanNotifierProvider.notifier)
                   .startDocumentScan(),
-          tooltip: 'Scan document',
-          child: const Icon(Icons.add),
         ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
-        bottomNavigationBar: HomeScanBar(
-          enabled: !scanning,
-          onScanDocument: () => ref
-              .read(documentScanNotifierProvider.notifier)
-              .startDocumentScan(),
-          onScanIdCard: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const IdCardScanView(),
-              ),
-            );
-          },
+        bottomNavigationBar: MainBottomBar(
+          selectedIndex: _selectedTab,
+          onTabSelected: (int index) => setState(() => _selectedTab = index),
         ),
       ),
     );
