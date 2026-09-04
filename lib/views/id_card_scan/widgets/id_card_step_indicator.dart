@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:scanner_app/app/theme.dart';
+import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/core/enums/id_card_scan_step.dart';
 
 class IdCardStepIndicator extends StatelessWidget {
@@ -21,15 +23,15 @@ class IdCardStepIndicator extends StatelessWidget {
       children: <Widget>[
         Expanded(
           child: _StepChip(
-            label: '1. Front Side',
+            label: '1. Front',
             isActive: activeIndex >= 0,
             isComplete: activeIndex >= 1,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppConstants.spaceSm),
         Expanded(
           child: _StepChip(
-            label: '2. Back Side',
+            label: '2. Back',
             isActive: activeIndex >= 1,
             isComplete: activeIndex >= 2,
           ),
@@ -52,28 +54,39 @@ class _StepChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
     final Color bg = isComplete
-        ? colors.primaryContainer
-        : (isActive ? colors.surfaceContainerHighest : colors.surface);
+        ? AppTheme.primary.withValues(alpha: 0.22)
+        : (isActive ? const Color(0xFF1A1D24) : const Color(0xFF16181E));
+    final Color border =
+        isComplete ? AppTheme.primary : const Color(0xFF2A2F3A);
 
-    return Material(
-      color: bg,
-      borderRadius: const BorderRadius.all(Radius.circular(12)),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMd),
+        border: Border.all(color: border),
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppConstants.spaceMd,
+          vertical: AppConstants.spaceMd,
+        ),
         child: Row(
           children: <Widget>[
             Icon(
               isComplete ? Icons.check_circle : Icons.radio_button_unchecked,
               size: 18,
-              color: isComplete ? colors.primary : colors.onSurfaceVariant,
+              color: isComplete ? AppTheme.primary : const Color(0xFF9CA3AF),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppConstants.spaceSm),
             Expanded(
               child: Text(
                 label,
-                style: Theme.of(context).textTheme.labelLarge,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isComplete ? Colors.white : const Color(0xFF9CA3AF),
+                ),
               ),
             ),
           ],

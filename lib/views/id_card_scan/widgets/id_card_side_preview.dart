@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:scanner_app/core/constants/app_constants.dart';
 
 class IdCardSidePreview extends StatelessWidget {
   const IdCardSidePreview({
@@ -14,23 +15,28 @@ class IdCardSidePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text(label, style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: AppConstants.spaceSm),
         AspectRatio(
           aspectRatio: 1.6,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: colors.surfaceContainerHighest,
-              borderRadius: const BorderRadius.all(Radius.circular(12)),
-              border: Border.all(color: colors.outlineVariant),
+              color: const Color(0xFF1A1D24),
+              borderRadius: BorderRadius.circular(AppConstants.radiusLg),
+              border: Border.all(color: const Color(0xFF2A2F3A)),
             ),
             child: ClipRRect(
-              borderRadius: const BorderRadius.all(Radius.circular(12)),
+              borderRadius: BorderRadius.circular(AppConstants.radiusLg),
               child: _buildImage(),
             ),
           ),
@@ -43,7 +49,11 @@ class IdCardSidePreview extends StatelessWidget {
     final String? path = imagePath;
     if (path == null || path.isEmpty || !File(path).existsSync()) {
       return const Center(
-        child: Icon(Icons.image_outlined, size: 40),
+        child: Icon(
+          Icons.image_outlined,
+          size: 40,
+          color: Color(0xFF6B7280),
+        ),
       );
     }
     return Image.file(
