@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:scanner_app/services/document_share_helper.dart';
 
 /// Full-screen interactive PDF preview viewer.
 class DocumentPreviewView extends StatefulWidget {
@@ -68,25 +68,12 @@ class _DocumentPreviewViewState extends State<DocumentPreviewView> {
             IconButton(
               tooltip: 'Share PDF',
               icon: const Icon(Icons.ios_share_rounded, size: 20),
-              onPressed: () async {
-                try {
-                  await SharePlus.instance.share(
-                    ShareParams(
-                      files: <XFile>[XFile(widget.pdfPath)],
-                      text: widget.title,
-                    ),
-                  );
-                } catch (_) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Please restart app to activate sharing module.',
-                        ),
-                      ),
-                    );
-                  }
-                }
+              onPressed: () {
+                DocumentShareHelper.sharePdfFile(
+                  context,
+                  pdfPath: widget.pdfPath,
+                  title: widget.title,
+                );
               },
             ),
         ],

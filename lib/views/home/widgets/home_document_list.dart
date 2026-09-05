@@ -8,6 +8,7 @@ class HomeDocumentList extends StatelessWidget {
     required this.documents,
     required this.onDelete,
     this.onTap,
+    this.onRename,
     this.physics,
     this.shrinkWrap = false,
     this.padding = const EdgeInsets.only(bottom: 88),
@@ -16,6 +17,7 @@ class HomeDocumentList extends StatelessWidget {
   final List<ScannedDocument> documents;
   final ValueChanged<String> onDelete;
   final ValueChanged<ScannedDocument>? onTap;
+  final void Function(String id, String newTitle)? onRename;
   final ScrollPhysics? physics;
   final bool shrinkWrap;
   final EdgeInsetsGeometry padding;
@@ -33,9 +35,11 @@ class HomeDocumentList extends StatelessWidget {
           document: document,
           onTap: onTap != null ? () => onTap!(document) : null,
           onDelete: () => onDelete(document.id),
+          onRename: onRename != null
+              ? (String newTitle) => onRename!(document.id, newTitle)
+              : null,
         );
       },
     );
   }
 }
-

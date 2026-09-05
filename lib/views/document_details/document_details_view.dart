@@ -8,12 +8,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:scanner_app/app/theme.dart';
 import 'package:scanner_app/core/constants/app_constants.dart';
-import 'package:scanner_app/core/enums/document_kind.dart';
 import 'package:scanner_app/models/scanned_document.dart';
 import 'package:scanner_app/providers/library_provider.dart';
 import 'package:scanner_app/views/ocr/ocr_result_view.dart';
 import 'package:scanner_app/views/preview/document_preview_view.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:scanner_app/services/document_share_helper.dart';
 
 /// Clean, premium Document Details View inspired by CamScanner multi-page layout.
 class DocumentDetailsView extends ConsumerStatefulWidget {
@@ -215,36 +214,7 @@ class _DocumentDetailsViewState extends ConsumerState<DocumentDetailsView> {
 
   Future<void> _shareDocument(ScannedDocument doc) async {
     HapticFeedback.lightImpact();
-    try {
-      if (doc.hasPdf && File(doc.pdfPath!).existsSync()) {
-        await SharePlus.instance.share(
-          ShareParams(
-            files: <XFile>[XFile(doc.pdfPath!)],
-            text: doc.title,
-          ),
-        );
-      } else if (doc.imagePaths.isNotEmpty) {
-        await SharePlus.instance.share(
-          ShareParams(
-            files: doc.imagePaths.map((String p) => XFile(p)).toList(),
-            text: doc.title,
-          ),
-        );
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No files available to share.')),
-          );
-        }
-      }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please restart app to activate sharing module.'),
-        ),
-      );
-    }
+    await DocumentShareHelper.shareDocument(context, doc);
   }
 
   void _showAddPageSheet(ScannedDocument doc) {
@@ -447,27 +417,42 @@ class _DocumentDetailsViewState extends ConsumerState<DocumentDetailsView> {
           onTap: () => _showRenameDialog(doc),
           borderRadius: BorderRadius.circular(AppConstants.radiusSm),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-            child: Row(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Flexible(
-                  child: Text(
-                    doc.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Flexible(
+                      child: Text(
+                        doc.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.edit_rounded,
+                      size: 13,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                const Icon(
-                  Icons.edit_rounded,
-                  size: 14,
-                  color: AppTheme.textSecondary,
+                const SizedBox(height: 2),
+                Text(
+                  '${doc.pageCount} ${doc.pageCount == 1 ? "page" : "pages"} · ${_dateFormat.format(doc.createdAt)}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -595,55 +580,11 @@ class _DocumentDetailsViewState extends ConsumerState<DocumentDetailsView> {
           CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: <Widget>[
-              // Document metadata badge header
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppConstants.pagePadding,
-                    AppConstants.spaceSm,
-                    AppConstants.pagePadding,
-                    AppConstants.spaceSm,
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primarySoft,
-                          borderRadius:
-                              BorderRadius.circular(AppConstants.radiusSm),
-                        ),
-                        child: Text(
-                          _kindLabel(doc.kind),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.primary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${doc.pageCount} ${doc.pageCount == 1 ? "page" : "pages"} · ${_dateFormat.format(doc.createdAt)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
               // Multi-page grid + Add Page Card
               SliverPadding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppConstants.pagePadding,
-                  vertical: AppConstants.spaceSm,
+                  vertical: AppConstants.spaceMd,
                 ),
                 sliver: SliverGrid(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -714,15 +655,6 @@ class _DocumentDetailsViewState extends ConsumerState<DocumentDetailsView> {
         ],
       ),
     );
-  }
-
-  String _kindLabel(DocumentKind kind) {
-    return switch (kind) {
-      DocumentKind.scan => 'Document Scan',
-      DocumentKind.idCard => 'ID Card',
-      DocumentKind.imported => 'Imported',
-      DocumentKind.toolOutput => 'Exported',
-    };
   }
 
   /// Single page thumbnail card with page number label beneath
@@ -1075,21 +1007,11 @@ class _FullScreenViewerState extends ConsumerState<_FullScreenViewer> {
   }
 
   Future<void> _shareCurrentPage(ScannedDocument doc) async {
-    try {
-      if (doc.imagePaths.isNotEmpty) {
-        await SharePlus.instance.share(
-          ShareParams(
-            files: <XFile>[XFile(doc.imagePaths[_currentIndex])],
-            text: '${doc.title} - Page ${_currentIndex + 1}',
-          ),
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please restart app to activate sharing module.'),
-        ),
+    if (doc.imagePaths.isNotEmpty && _currentIndex < doc.imagePaths.length) {
+      await DocumentShareHelper.shareSingleImage(
+        context,
+        imagePath: doc.imagePaths[_currentIndex],
+        title: '${doc.title} - Page ${_currentIndex + 1}',
       );
     }
   }

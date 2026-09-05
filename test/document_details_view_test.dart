@@ -34,15 +34,16 @@ void main() {
       ),
     );
 
-    // Verify Title and Subtitle
+    // Verify Title and Subtitle in AppBar
     expect(find.text('Invoice 2026'), findsOneWidget);
-    expect(find.text('Document Scan'), findsOneWidget);
+    expect(find.textContaining('1 page ·'), findsOneWidget);
+    expect(find.text('Document Scan'), findsNothing);
 
     // Verify "Add Page" tile in grid
     expect(find.text('Add Page'), findsWidgets);
 
-    // Verify Smart AI OCR Banner
-    expect(find.text('Extract text from document (AI OCR)'), findsOneWidget);
+    // Verify un-needed banners are not present
+    expect(find.text('Extract text from document (AI OCR)'), findsNothing);
 
     // Verify Bottom Bar tools
     expect(find.text('Add'), findsOneWidget);

@@ -29,18 +29,25 @@ class PdfToolsNotifier extends _$PdfToolsNotifier {
     });
   }
 
-  Future<void> mergePdfs(List<String> pdfPaths) async {
+  Future<ScannedDocument?> mergePdfs(
+    List<String> pdfPaths, {
+    String? customTitle,
+  }) async {
+    ScannedDocument? created;
     await _run('PDFs merged.', () async {
       final String outputPath = await _tempPdf('merged');
       await ref.read(pdfToolsServiceProvider).mergePdfs(pdfPaths, outputPath);
-      await ref.read(storageServiceProvider).persistGeneratedPdf(
+      created = await ref.read(storageServiceProvider).persistGeneratedPdf(
             kind: DocumentKind.toolOutput,
-            title: FileNameUtils.stamped('Merged'),
+            title: (customTitle != null && customTitle.trim().isNotEmpty)
+                ? customTitle.trim()
+                : FileNameUtils.stamped('Merged'),
             sourcePdfPath: outputPath,
           );
       await _refreshLibrary();
       return true;
     });
+    return created;
   }
 
   Future<void> addWatermark({
