@@ -114,14 +114,23 @@ class _ShutterRingButtonState extends State<_ShutterRingButton> {
             ],
           ),
           child: Center(
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-              ),
-            ),
+            child: widget.enabled
+                ? Container(
+                    width: 60,
+                    height: 60,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                    ),
+                  )
+                : const SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.8,
+                      color: mint,
+                    ),
+                  ),
           ),
         ),
       ),

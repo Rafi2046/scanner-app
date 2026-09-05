@@ -37,8 +37,7 @@ class CustomScanNotifier extends _$CustomScanNotifier {
     }
     state = state.copyWith(
       selectedFilter: filter,
-      busy: true,
-      busyMessage: 'Applying ${filter.label}…',
+      clearError: true,
     );
     try {
       final String processed = await ref.read(scanEnhanceServiceProvider).applyFilter(
@@ -48,11 +47,9 @@ class CustomScanNotifier extends _$CustomScanNotifier {
       state = state.copyWith(
         warpedPath: processed,
         selectedFilter: filter,
-        busy: false,
-        clearBusyMessage: true,
       );
     } catch (error) {
-      state = state.copyWith(busy: false, clearBusyMessage: true, error: error);
+      state = state.copyWith(error: error);
     }
   }
 
@@ -64,7 +61,6 @@ class CustomScanNotifier extends _$CustomScanNotifier {
   void beginCapture() {
     state = state.copyWith(
       busy: true,
-      busyMessage: 'Capturing…',
       clearError: true,
     );
   }
@@ -97,7 +93,6 @@ class CustomScanNotifier extends _$CustomScanNotifier {
     }
     state = state.copyWith(
       busy: true,
-      busyMessage: 'Finding paper…',
       clearError: true,
     );
     try {
@@ -120,7 +115,6 @@ class CustomScanNotifier extends _$CustomScanNotifier {
   Future<void> rotateLeft() async {
     final String? raw = state.rawWarpedPath;
     if (raw == null) return;
-    state = state.copyWith(busy: true, busyMessage: 'Rotating…', clearError: true);
     try {
       final String rotatedRaw = await ref.read(scanEnhanceServiceProvider).rotateImage(
             imagePath: raw,
@@ -133,11 +127,9 @@ class CustomScanNotifier extends _$CustomScanNotifier {
       state = state.copyWith(
         rawWarpedPath: rotatedRaw,
         warpedPath: rotatedFiltered,
-        busy: false,
-        clearBusyMessage: true,
       );
     } catch (error) {
-      state = state.copyWith(busy: false, clearBusyMessage: true, error: error);
+      state = state.copyWith(error: error);
     }
   }
 
@@ -151,7 +143,7 @@ class CustomScanNotifier extends _$CustomScanNotifier {
   }
 
   Future<void> onRawCaptured(String path, {ScanQuad? liveQuad}) async {
-    state = state.copyWith(busy: true, busyMessage: 'Detecting edges…', clearError: true);
+    state = state.copyWith(busy: true, clearError: true);
     try {
       final ScanQuad quad = await ref
           .read(edgeDetectServiceProvider)
@@ -173,7 +165,7 @@ class CustomScanNotifier extends _$CustomScanNotifier {
     final String? path = state.pendingPath;
     final ScanQuad? quad = state.pendingQuad;
     if (path == null || quad == null) return;
-    state = state.copyWith(busy: true, busyMessage: 'Enhancing document…', clearError: true);
+    state = state.copyWith(busy: true, clearError: true);
     try {
       final String rawWarped = await ref.read(edgeDetectServiceProvider).warp(
             imagePath: path,

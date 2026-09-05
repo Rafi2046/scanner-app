@@ -83,7 +83,7 @@ class _CustomScanViewState extends ConsumerState<CustomScanView> {
         }
       },
       child: LoadingOverlay(
-        visible: scan.busy,
+        visible: scan.busy && scan.step == CustomScanStep.pages,
         message: scan.busyMessage,
         child: scan.step == CustomScanStep.capture
             ? const Scaffold(
