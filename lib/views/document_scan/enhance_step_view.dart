@@ -16,9 +16,9 @@ import 'package:scanner_app/views/document_scan/widgets/scan_filter_visual_carou
 import 'package:scanner_app/views/ocr/ocr_result_view.dart';
 import 'package:scanner_app/views/tools/signature_view.dart';
 
-/// Clean, sleek, non-bulky CamScanner Pro document enhancement view.
-/// Features lightweight 3D carousel, clean document elevation, compact filter cards,
-/// and refined non-bulky icons.
+/// Clean, sleek, full-screen CamScanner document enhancement view.
+/// Pages occupy 100% viewport width without chopped edge-peeks,
+/// with real document aspect ratios and minimal, non-bulky controls.
 class EnhanceStepView extends ConsumerStatefulWidget {
   const EnhanceStepView({super.key});
 
@@ -40,7 +40,21 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     _carouselIndex = initialPage;
     _pageController = PageController(
       initialPage: initialPage,
-      viewportFraction: 0.86,
+      viewportFraction: 1.0, // 100% full-screen page presentation, zero chopped edge-peeks
+    );
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    // Recreate controller on hot reload to force viewportFraction 1.0
+    final int curr = _pageController.hasClients
+        ? (_pageController.page?.round() ?? _carouselIndex)
+        : _carouselIndex;
+    _pageController.dispose();
+    _pageController = PageController(
+      initialPage: curr,
+      viewportFraction: 1.0,
     );
   }
 
@@ -477,10 +491,11 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
               ),
             ),
 
-            // Document Center Preview Stage with 3D Cover-flow Carousel
+            // Document Center Preview Stage: 100% full-screen width PageView
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
+                physics: const BouncingScrollPhysics(),
                 itemCount: totalPages + 1, // Document Pages + 1 "+ Add Pages" Card
                 onPageChanged: (int index) {
                   setState(() => _carouselIndex = index);
@@ -489,33 +504,14 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                   }
                 },
                 itemBuilder: (BuildContext context, int index) {
-                  return AnimatedBuilder(
-                    animation: _pageController,
-                    builder: (BuildContext context, Widget? child) {
-                      double scale = 1.0;
-                      double opacity = 1.0;
-                      if (_pageController.position.haveDimensions) {
-                        final double page = _pageController.page ?? _carouselIndex.toDouble();
-                        final double diff = (page - index).abs();
-                        scale = (1.0 - (diff * 0.07)).clamp(0.93, 1.0);
-                        opacity = (1.0 - (diff * 0.30)).clamp(0.70, 1.0);
-                      }
-                      return Transform.scale(
-                        scale: scale,
-                        child: Opacity(
-                          opacity: opacity,
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: index == totalPages
-                        ? _buildAddPagesCard(scan)
-                        : _buildDocumentPageCard(
-                            page: pages[index],
-                            index: index,
-                            totalPages: totalPages,
-                            scanBusy: scan.busy,
-                          ),
+                  if (index == totalPages) {
+                    return _buildAddPagesCard(scan);
+                  }
+                  return _buildDocumentPageCard(
+                    page: pages[index],
+                    index: index,
+                    totalPages: totalPages,
+                    scanBusy: scan.busy,
                   );
                 },
               ),
@@ -620,7 +616,7 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     );
   }
 
-  /// Builds clean, non-bulky Document Page Card.
+  /// Builds full-screen width Document Page Card.
   Widget _buildDocumentPageCard({
     required ScanPageDraft page,
     required int index,
@@ -630,19 +626,16 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     final String pageImgPath = page.imagePath;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Center(
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.10),
-              width: 0.8,
-            ),
             boxShadow: <BoxShadow>[
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.60),
-                blurRadius: 20,
+                color: Colors.black.withValues(alpha: 0.65),
+                blurRadius: 24,
+                spreadRadius: 2,
                 offset: const Offset(0, 8),
               ),
             ],
@@ -667,9 +660,9 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                   top: 10,
                   left: 10,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.65),
+                      color: Colors.black.withValues(alpha: 0.70),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.white24, width: 0.7),
                     ),
@@ -677,9 +670,9 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                       '${index + 1} / $totalPages',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 10,
+                        fontSize: 10.5,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
+                        letterSpacing: 0.4,
                       ),
                     ),
                   ),
@@ -697,7 +690,7 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                         width: 28,
                         height: 28,
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.65),
+                          color: Colors.black.withValues(alpha: 0.70),
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white24, width: 0.7),
                         ),
@@ -718,16 +711,16 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                     onTap: () => _openFullscreenViewer(pageImgPath, page.rotationTurns),
                     behavior: HitTestBehavior.opaque,
                     child: Container(
-                      padding: const EdgeInsets.all(5.5),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.65),
+                        color: Colors.black.withValues(alpha: 0.70),
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white24, width: 0.7),
                       ),
                       child: const Icon(
                         Icons.fullscreen_rounded,
                         color: Colors.white70,
-                        size: 17,
+                        size: 18,
                       ),
                     ),
                   ),
@@ -740,146 +733,162 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     );
   }
 
-  /// Builds a clean, minimalist "+ Add Pages" slide without bulky banners or giant buttons.
+  /// Builds a clean, full-size "+ Add Pages" sheet card with real document aspect ratio.
   Widget _buildAddPagesCard(CustomScanState scan) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: Center(
-        child: GestureDetector(
-          onTap: scan.busy ? null : _showAddPageSheet,
-          behavior: HitTestBehavior.opaque,
-          child: CustomPaint(
-            painter: const _DashedBorderPainter(
-              color: Color(0x5500D2A0),
-              strokeWidth: 1.4,
-              dashLength: 7.0,
-              gapLength: 5.0,
-              borderRadius: 16.0,
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF14171E),
-                borderRadius: BorderRadius.circular(16),
+        child: AspectRatio(
+          // Standard A4 document sheet aspect ratio (1 / 1.414) matching real pages
+          aspectRatio: 1 / 1.414,
+          child: GestureDetector(
+            onTap: scan.busy ? null : _showAddPageSheet,
+            behavior: HitTestBehavior.opaque,
+            child: CustomPaint(
+              painter: const _DashedBorderPainter(
+                color: Color(0x6600D2A0),
+                strokeWidth: 1.6,
+                dashLength: 8.0,
+                gapLength: 6.0,
+                borderRadius: 16.0,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  // Subtle, elegant camera circle
-                  Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: _accent.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _accent.withValues(alpha: 0.35), width: 1.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF14171E),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
                     ),
-                    child: const Icon(
-                      Icons.add_a_photo_outlined,
-                      color: _accent,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Add Next Page',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Tap anywhere to add next page',
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Compact, clean chips row
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      // Camera chip
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: scan.busy
-                              ? null
-                              : () {
-                                  HapticFeedback.lightImpact();
-                                  ref.read(customScanNotifierProvider.notifier).addPageViaCamera();
-                                },
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7.5),
-                            decoration: BoxDecoration(
-                              color: _accent.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: _accent.withValues(alpha: 0.4), width: 0.9),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                Icon(Icons.camera_alt_rounded, color: _accent, size: 15),
-                                SizedBox(width: 5),
-                                Text(
-                                  'Camera',
-                                  style: TextStyle(
-                                    color: _accent,
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: _accent.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _accent.withValues(alpha: 0.35),
+                            width: 1.0,
                           ),
+                        ),
+                        child: const Icon(
+                          Icons.add_a_photo_outlined,
+                          color: _accent,
+                          size: 24,
                         ),
                       ),
-                      const SizedBox(width: 8),
-
-                      // Gallery chip
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: scan.busy
-                              ? null
-                              : () {
-                                  HapticFeedback.lightImpact();
-                                  ref.read(customScanNotifierProvider.notifier).addPageViaGallery();
-                                },
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7.5),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.06),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Add Next Page',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Photograph or import the next page\ninto this document',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          // Camera Chip
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: scan.busy
+                                  ? null
+                                  : () {
+                                      HapticFeedback.lightImpact();
+                                      ref.read(customScanNotifierProvider.notifier).addPageViaCamera();
+                                    },
                               borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: Colors.white12, width: 0.9),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                Icon(Icons.photo_library_outlined, color: Colors.white70, size: 15),
-                                SizedBox(width: 5),
-                                Text(
-                                  'Gallery',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _accent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: _accent.withValues(alpha: 0.45), width: 1.0),
                                 ),
-                              ],
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    Icon(Icons.camera_alt_rounded, color: _accent, size: 15),
+                                    SizedBox(width: 5),
+                                    Text(
+                                      'Camera',
+                                      style: TextStyle(
+                                        color: _accent,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(width: 10),
+
+                          // Gallery Chip
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: scan.busy
+                                  ? null
+                                  : () {
+                                      HapticFeedback.lightImpact();
+                                      ref.read(customScanNotifierProvider.notifier).addPageViaGallery();
+                                    },
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.06),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: Colors.white12, width: 1.0),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    Icon(Icons.photo_library_outlined, color: Colors.white70, size: 15),
+                                    SizedBox(width: 5),
+                                    Text(
+                                      'Gallery',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
