@@ -8,11 +8,16 @@ import 'package:scanner_app/views/document_scan/widgets/scan_filter_chip_row.dar
 import 'package:scanner_app/views/document_scan/widgets/scan_shutter_button.dart';
 import 'package:scanner_app/views/widgets/primary_button.dart';
 
-class EnhanceStepView extends ConsumerWidget {
+class EnhanceStepView extends ConsumerStatefulWidget {
   const EnhanceStepView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EnhanceStepView> createState() => _EnhanceStepViewState();
+}
+
+class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
+  @override
+  Widget build(BuildContext context) {
     final scan = ref.watch(customScanNotifierProvider);
     final String? path = scan.warpedPath;
 
@@ -39,8 +44,10 @@ class EnhanceStepView extends ConsumerWidget {
         const SizedBox(height: AppConstants.spaceMd),
         ScanFilterChipRow(
           selected: scan.selectedFilter,
-          onSelected: (filter) =>
-              ref.read(customScanNotifierProvider.notifier).selectFilter(filter),
+          onSelected: (filter) {
+            if (!mounted) return;
+            ref.read(customScanNotifierProvider.notifier).selectFilter(filter);
+          },
         ),
         const SizedBox(height: AppConstants.spaceMd),
         ScanBottomBar(
@@ -48,9 +55,12 @@ class EnhanceStepView extends ConsumerWidget {
             label: 'Next',
             onPressed: scan.busy
                 ? null
-                : () => ref
-                    .read(customScanNotifierProvider.notifier)
-                    .confirmEnhance(),
+                : () {
+                    if (!mounted) return;
+                    ref
+                        .read(customScanNotifierProvider.notifier)
+                        .confirmEnhance();
+                  },
           ),
         ),
       ],

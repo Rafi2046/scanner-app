@@ -1,9 +1,10 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:scanner_app/models/scan_quad.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_batch_pill.dart';
-import 'package:scanner_app/views/document_scan/widgets/scan_viewfinder_frame.dart';
+import 'package:scanner_app/views/document_scan/widgets/scan_document_overlay.dart';
 
-/// Full-height camera viewfinder framed with mint outline and batch pill.
+/// Full-height camera viewfinder with live document tracking overlay.
 class ScanCameraViewfinder extends StatelessWidget {
   const ScanCameraViewfinder({
     super.key,
@@ -11,6 +12,7 @@ class ScanCameraViewfinder extends StatelessWidget {
     required this.aspectRatio,
     required this.isId,
     required this.isBatch,
+    required this.normalizedQuad,
     required this.onBatchToggle,
   });
 
@@ -18,6 +20,7 @@ class ScanCameraViewfinder extends StatelessWidget {
   final double aspectRatio;
   final bool isId;
   final bool isBatch;
+  final ScanQuad? normalizedQuad;
   final ValueChanged<bool> onBatchToggle;
 
   @override
@@ -45,7 +48,11 @@ class ScanCameraViewfinder extends StatelessWidget {
                 );
               },
             ),
-            ScanViewfinderFrame(isIdCard: isId),
+            ScanDocumentOverlay(
+              normalizedQuad: normalizedQuad,
+              isIdCard: isId,
+              cameraAspectRatio: aspectRatio,
+            ),
             Positioned(
               bottom: 12,
               left: 0,

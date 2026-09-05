@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:scanner_app/models/scan_quad.dart';
 
 /// Interactive draggable quad overlay for perspective crop.
-class ScanCropOverlay extends StatelessWidget {
+class ScanCropOverlay extends StatefulWidget {
   const ScanCropOverlay({
     super.key,
     required this.imagePath,
@@ -20,9 +20,33 @@ class ScanCropOverlay extends StatelessWidget {
   final ValueChanged<ScanQuad> onQuadChanged;
 
   @override
+  State<ScanCropOverlay> createState() => _ScanCropOverlayState();
+}
+
+class _ScanCropOverlayState extends State<ScanCropOverlay> {
+  late ScanQuad _localQuad;
+
+  @override
+  void initState() {
+    super.initState();
+    _localQuad = widget.quad;
+  }
+
+  @override
+  void didUpdateWidget(covariant ScanCropOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.quad != oldWidget.quad) {
+      _localQuad = widget.quad;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final double scale = _fitScale(imageSize, maxSize);
-    final Size display = Size(imageSize.width * scale, imageSize.height * scale);
+    final double scale = _fitScale(widget.imageSize, widget.maxSize);
+    final Size display = Size(
+      widget.imageSize.width * scale,
+      widget.imageSize.height * scale,
+    );
 
     Offset toDisplay(Offset p) => Offset(p.dx * scale, p.dy * scale);
     Offset toImage(Offset p) => Offset(p.dx / scale, p.dy / scale);
@@ -34,29 +58,31 @@ class ScanCropOverlay extends StatelessWidget {
         child: Stack(
           children: <Widget>[
             Positioned.fill(
-              child: Image.file(File(imagePath), fit: BoxFit.fill),
+              child: Image.file(File(widget.imagePath), fit: BoxFit.fill),
             ),
             CustomPaint(
               size: display,
-              painter: _QuadPainter(points: quad.points.map(toDisplay).toList()),
+              painter: _QuadPainter(
+                points: _localQuad.points.map(toDisplay).toList(),
+              ),
             ),
             for (int i = 0; i < 4; i++)
               _CornerHandle(
-                offset: toDisplay(quad.points[i]),
+                offset: toDisplay(_localQuad.points[i]),
                 onDrag: (Offset local) {
-                  final List<Offset> next = List<Offset>.from(quad.points);
+                  final List<Offset> next = List<Offset>.from(_localQuad.points);
                   next[i] = Offset(
-                    toImage(local).dx.clamp(0, imageSize.width),
-                    toImage(local).dy.clamp(0, imageSize.height),
+                    toImage(local).dx.clamp(0, widget.imageSize.width),
+                    toImage(local).dy.clamp(0, widget.imageSize.height),
                   );
-                  onQuadChanged(
-                    ScanQuad(
-                      topLeft: next[0],
-                      topRight: next[1],
-                      bottomRight: next[2],
-                      bottomLeft: next[3],
-                    ),
+                  final ScanQuad updated = ScanQuad(
+                    topLeft: next[0],
+                    topRight: next[1],
+                    bottomRight: next[2],
+                    bottomLeft: next[3],
                   );
+                  setState(() => _localQuad = updated);
+                  widget.onQuadChanged(updated);
                 },
               ),
           ],
@@ -80,11 +106,12 @@ class _CornerHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const double size = 28;
+    const double size = 32;
     return Positioned(
       left: offset.dx - size / 2,
       top: offset.dy - size / 2,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onPanUpdate: (DragUpdateDetails d) => onDrag(offset + d.delta),
         child: Container(
           width: size,
@@ -92,7 +119,14 @@ class _CornerHandle extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF00D2A0), width: 2.5),
+            border: Border.all(color: const Color(0xFF00D2A0), width: 3.0),
+            boxShadow: const <BoxShadow>[
+              BoxShadow(
+                color: Colors.black38,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
         ),
       ),

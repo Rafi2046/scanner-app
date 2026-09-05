@@ -61,7 +61,7 @@ class CameraCaptureService {
       back,
       preset,
       enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
+      imageFormatGroup: ImageFormatGroup.yuv420,
     );
 
     try {
@@ -85,6 +85,31 @@ class CameraCaptureService {
     }
   }
 
+  int get sensorOrientation =>
+      _controller?.description.sensorOrientation ?? 90;
+
+  Future<void> startImageStream(
+    void Function(CameraImage image) onAvailable,
+  ) async {
+    final CameraController? c = _controller;
+    if (c == null || !c.value.isInitialized || c.value.isStreamingImages) {
+      return;
+    }
+    try {
+      await c.startImageStream(onAvailable);
+    } catch (_) {}
+  }
+
+  Future<void> stopImageStream() async {
+    final CameraController? c = _controller;
+    if (c == null || !c.value.isInitialized || !c.value.isStreamingImages) {
+      return;
+    }
+    try {
+      await c.stopImageStream();
+    } catch (_) {}
+  }
+
   /// Captures a still, downscales to [AppConstants.scanMaxEdge], returns path.
   Future<String> takePicture() async {
     final CameraController? c = _controller;
@@ -96,6 +121,9 @@ class CameraCaptureService {
     }
 
     try {
+      if (c.value.isStreamingImages) {
+        await c.stopImageStream();
+      }
       final XFile raw = await c.takePicture();
       return _downscaleToScanCache(raw.path);
     } on AppException {

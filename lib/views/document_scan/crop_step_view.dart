@@ -8,7 +8,7 @@ import 'package:scanner_app/views/document_scan/widgets/scan_crop_overlay.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_shutter_button.dart';
 import 'package:scanner_app/views/widgets/primary_button.dart';
 
-/// Perspective crop step allowing corners adjustment.
+/// Perspective crop step allowing interactive corner adjustment.
 class CropStepView extends ConsumerStatefulWidget {
   const CropStepView({super.key});
 
@@ -18,6 +18,30 @@ class CropStepView extends ConsumerStatefulWidget {
 
 class _CropStepViewState extends ConsumerState<CropStepView> {
   Size? _imageSize;
+  String? _resolvedPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImageSize();
+  }
+
+  void _loadImageSize() {
+    final String? path = ref.read(customScanNotifierProvider).pendingPath;
+    if (path != null && path != _resolvedPath) {
+      _resolvedPath = path;
+      _resolveImageSize(path).then((Size size) {
+        if (mounted) setState(() => _imageSize = size);
+      });
+    }
+  }
+
+  Future<Size> _resolveImageSize(String path) async {
+    final File file = File(path);
+    final bytes = await file.readAsBytes();
+    final decoded = await decodeImageFromList(bytes);
+    return Size(decoded.width.toDouble(), decoded.height.toDouble());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,33 +55,34 @@ class _CropStepViewState extends ConsumerState<CropStepView> {
       );
     }
 
+    if (path != _resolvedPath) {
+      _loadImageSize();
+    }
+
     return Column(
       children: <Widget>[
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(AppConstants.pagePadding),
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints constraints) {
-                return FutureBuilder<Size>(
-                  future: _resolveImageSize(path),
-                  builder: (BuildContext context, AsyncSnapshot<Size> snap) {
-                    if (!snap.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    _imageSize = snap.data;
-                    return ScanCropOverlay(
-                      imagePath: path,
-                      imageSize: snap.data!,
-                      quad: quad,
-                      maxSize: constraints.biggest,
-                      onQuadChanged: (ScanQuad q) => ref
-                          .read(customScanNotifierProvider.notifier)
-                          .updateQuad(q),
-                    );
-                  },
-                );
-              },
-            ),
+            child: _imageSize == null
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF00D2A0)),
+                  )
+                : LayoutBuilder(
+                    builder: (BuildContext context, BoxConstraints constraints) {
+                      return ScanCropOverlay(
+                        imagePath: path,
+                        imageSize: _imageSize!,
+                        quad: quad,
+                        maxSize: constraints.biggest,
+                        onQuadChanged: (ScanQuad q) {
+                          ref
+                              .read(customScanNotifierProvider.notifier)
+                              .updateQuad(q);
+                        },
+                      );
+                    },
+                  ),
           ),
         ),
         ScanBottomBar(
@@ -97,13 +122,5 @@ class _CropStepViewState extends ConsumerState<CropStepView> {
         ),
       ],
     );
-  }
-
-  Future<Size> _resolveImageSize(String path) async {
-    if (_imageSize != null) return _imageSize!;
-    final File file = File(path);
-    final bytes = await file.readAsBytes();
-    final decoded = await decodeImageFromList(bytes);
-    return Size(decoded.width.toDouble(), decoded.height.toDouble());
   }
 }

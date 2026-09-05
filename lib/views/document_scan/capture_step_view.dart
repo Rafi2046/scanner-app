@@ -6,6 +6,8 @@ import 'package:scanner_app/core/errors/app_exception.dart';
 import 'package:scanner_app/providers/custom_scan_provider.dart';
 import 'package:scanner_app/providers/custom_scan_state.dart';
 import 'package:scanner_app/providers/service_providers.dart';
+import 'package:scanner_app/models/scan_quad.dart';
+import 'package:scanner_app/services/live_document_detector.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_camera_top_bar.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_camera_viewfinder.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_features_bottom_sheet.dart';
@@ -19,7 +21,7 @@ import 'package:scanner_app/views/tools/pdf_to_image_view.dart';
 import 'package:scanner_app/views/tools/signature_view.dart';
 import 'package:scanner_app/views/tools/watermark_view.dart';
 
-/// Full-screen immersive camera capture screen.
+/// Full-screen immersive camera capture screen with live document focus.
 class CaptureStepView extends ConsumerStatefulWidget {
   const CaptureStepView({super.key});
 
@@ -28,11 +30,15 @@ class CaptureStepView extends ConsumerStatefulWidget {
 }
 
 class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
+  final LiveDocumentDetector _detector = LiveDocumentDetector();
+  ScanQuad? _detectedQuad;
   bool _ready = false;
+  bool _disposed = false;
   Object? _initError;
   FlashMode _flashMode = FlashMode.off;
   bool _isBatch = false;
   ScanTabMode _tabMode = ScanTabMode.scan;
+  int _missedFrames = 0;
 
   @override
   void initState() {
@@ -43,19 +49,49 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
     _initCamera();
   }
 
+  @override
+  void dispose() {
+    _disposed = true;
+    ref.read(cameraCaptureServiceProvider).stopImageStream();
+    super.dispose();
+  }
+
   Future<void> _initCamera() async {
     try {
-      await ref.read(cameraCaptureServiceProvider).initialize();
-      if (mounted) setState(() => _ready = true);
+      final camera = ref.read(cameraCaptureServiceProvider);
+      await camera.initialize();
+      if (!mounted || _disposed) return;
+      setState(() => _ready = true);
+      final int orientation = camera.sensorOrientation;
+      await camera.startImageStream((CameraImage image) {
+        if (!_disposed && mounted) {
+          _scheduleDetection(image, orientation);
+        }
+      });
     } catch (error) {
-      if (mounted) setState(() => _initError = error);
+      if (mounted && !_disposed) setState(() => _initError = error);
     }
+  }
+
+  void _scheduleDetection(CameraImage image, int orientation) {
+    _detector.detectLiveDocument(image, orientation).then((ScanQuad? quad) {
+      if (!mounted || _disposed) return;
+      if (quad != null) {
+        _missedFrames = 0;
+        setState(() => _detectedQuad = quad);
+      } else if (_detectedQuad != null) {
+        _missedFrames++;
+        if (_missedFrames > 12) {
+          setState(() => _detectedQuad = null);
+        }
+      }
+    });
   }
 
   Future<void> _toggleFlash() async {
     _flashMode = _flashMode == FlashMode.off ? FlashMode.torch : FlashMode.off;
     await ref.read(cameraCaptureServiceProvider).setFlash(_flashMode);
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   void _push(Widget page) {
@@ -64,39 +100,31 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
 
   void _onModeChanged(ScanTabMode mode) {
     setState(() => _tabMode = mode);
+    final notifier = ref.read(customScanNotifierProvider.notifier);
     switch (mode) {
-      case ScanTabMode.scan:
-        ref.read(customScanNotifierProvider.notifier).startSession(CustomScanMode.document);
-      case ScanTabMode.idCards:
-        ref.read(customScanNotifierProvider.notifier).startSession(CustomScanMode.idCard);
-      case ScanTabMode.text:
-        _push(const OcrResultView());
-      case ScanTabMode.sign:
-        _push(const SignatureView());
-      case ScanTabMode.toWord:
-        _push(const PdfToImageView());
+      case ScanTabMode.scan: notifier.startSession(CustomScanMode.document);
+      case ScanTabMode.idCards: notifier.startSession(CustomScanMode.idCard);
+      case ScanTabMode.text: _push(const OcrResultView());
+      case ScanTabMode.sign: _push(const SignatureView());
+      case ScanTabMode.toWord: _push(const PdfToImageView());
       case ScanTabMode.questionSet:
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Question Set scan mode active.')),
+          const SnackBar(content: Text('Question Set mode active.')),
         );
     }
   }
 
   Future<void> _capture(Future<String> Function() action) async {
     try {
+      await ref.read(cameraCaptureServiceProvider).stopImageStream();
       final String path = await action();
       await ref.read(customScanNotifierProvider.notifier).onRawCaptured(path);
     } on ScannerCancelledException {
       // User cancelled picker
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              error is AppException ? error.message : 'Action failed: $error',
-            ),
-          ),
-        );
+        final String msg = error is AppException ? error.message : 'Action failed: $error';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
     }
   }
@@ -122,14 +150,10 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
     final camera = ref.watch(cameraCaptureServiceProvider);
 
     if (_initError != null) {
-      return Center(
-        child: Text(
-          _initError is AppException
-              ? (_initError! as AppException).message
-              : 'Camera failed to start.',
-          style: const TextStyle(color: Colors.white70),
-        ),
-      );
+      final String msg = _initError is AppException
+          ? (_initError! as AppException).message
+          : 'Camera failed to start.';
+      return Center(child: Text(msg, style: const TextStyle(color: Colors.white70)));
     }
 
     if (!_ready || !camera.isInitialized || camera.controller == null) {
@@ -153,6 +177,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
               aspectRatio: camera.previewAspectRatio,
               isId: isId,
               isBatch: _isBatch,
+              normalizedQuad: _detectedQuad,
               onBatchToggle: (bool val) => setState(() => _isBatch = val),
             ),
           ),

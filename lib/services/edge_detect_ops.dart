@@ -41,18 +41,21 @@ DetectCornersResult detectCornersSync(String path) {
     for (int i = 0; i < contours.length; i++) {
       final cv.VecPoint contour = contours[i];
       final double peri = cv.arcLength(contour, true);
-      final cv.VecPoint approx = cv.approxPolyDP(contour, 0.02 * peri, true);
-      if (approx.length == 4 && cv.isContourConvex(approx)) {
-        final double area = cv.contourArea(approx);
-        if (area > bestArea && area >= minArea) {
-          best?.dispose();
-          best = approx;
-          bestArea = area;
+      for (final double eps in <double>[0.02, 0.035, 0.05, 0.07]) {
+        final cv.VecPoint approx = cv.approxPolyDP(contour, eps * peri, true);
+        if (approx.length == 4 && cv.isContourConvex(approx)) {
+          final double area = cv.contourArea(approx);
+          if (area > bestArea && area >= minArea) {
+            best?.dispose();
+            best = approx;
+            bestArea = area;
+          } else {
+            approx.dispose();
+          }
+          break;
         } else {
           approx.dispose();
         }
-      } else {
-        approx.dispose();
       }
     }
 
