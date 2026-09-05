@@ -5,6 +5,7 @@ import 'dart:ui' show PathMetric;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scanner_app/core/enums/custom_scan_mode.dart';
 import 'package:scanner_app/core/enums/scan_filter.dart';
 import 'package:scanner_app/models/scan_page_draft.dart';
 import 'package:scanner_app/providers/custom_scan_provider.dart';
@@ -801,7 +802,20 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                         },
                         onSign: _onSign,
                         onConfirm: () {
-                          ref.read(customScanNotifierProvider.notifier).save();
+                          final CustomScanState scanState = ref.read(customScanNotifierProvider);
+                          if (scanState.mode == CustomScanMode.idCard &&
+                              !scanState.idCategory.isSingleSide &&
+                              !scanState.canSaveIdCard) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Front side saved! Now scan the back side.'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                            ref.read(customScanNotifierProvider.notifier).prepareScanBackSide();
+                          } else {
+                            ref.read(customScanNotifierProvider.notifier).save();
+                          }
                         },
                       ),
                     ],

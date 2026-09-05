@@ -63,6 +63,47 @@ class PdfService {
     }
   }
 
+  /// Places a single ID / passport / certificate image centered on an A4 page.
+  Future<String> createSingleCardA4({
+    required String imagePath,
+    required String outputPath,
+  }) async {
+    PdfDocument? document;
+    try {
+      final PdfBitmap bitmap = await _loadBitmap(imagePath);
+
+      document = PdfDocument();
+      document.pageSettings.size = PdfImageFit.a4;
+      document.pageSettings.margins.all = 0;
+
+      final PdfPage page = document.pages.add();
+      final Rect slot = PdfImageFit.singleCardSlot(
+        pageSize: PdfImageFit.a4,
+        margin: AppConstants.pdfMarginPoints,
+      );
+
+      page.graphics.drawImage(
+        bitmap,
+        PdfImageFit.containCentered(
+          imageSize: Size(bitmap.width.toDouble(), bitmap.height.toDouble()),
+          slot: slot,
+        ),
+      );
+
+      await _writeDocument(document, outputPath);
+      return outputPath;
+    } on PdfException {
+      rethrow;
+    } catch (error) {
+      throw PdfException(
+        'Failed to create single card A4 PDF.',
+        cause: error,
+      );
+    } finally {
+      document?.dispose();
+    }
+  }
+
   /// Builds a multi-page A4 PDF, one scanned image per page, aspect ratio preserved.
   Future<String> createDocumentPdfFromImages({
     required List<String> imagePaths,

@@ -55,4 +55,14 @@ abstract final class PdfImageFit {
 
     return (frontSlot: frontSlot, backSlot: backSlot);
   }
+
+  /// Single centered or upper-half slot on A4 for 1-sided documents (e.g. Passport, Certificate).
+  static Rect singleCardSlot({
+    required Size pageSize,
+    required double margin,
+  }) {
+    final double contentWidth = pageSize.width - (margin * 2);
+    final double contentHeight = pageSize.height - (margin * 2);
+    return Rect.fromLTWH(margin, margin, contentWidth, contentHeight);
+  }
 }

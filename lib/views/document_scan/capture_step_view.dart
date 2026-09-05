@@ -1,7 +1,10 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:scanner_app/core/enums/custom_scan_mode.dart';
+import 'package:scanner_app/core/enums/id_card_category.dart';
+import 'package:scanner_app/core/enums/id_scan_side.dart';
 import 'package:scanner_app/core/errors/app_exception.dart';
 import 'package:scanner_app/providers/custom_scan_provider.dart';
 import 'package:scanner_app/providers/custom_scan_state.dart';
@@ -9,6 +12,7 @@ import 'package:scanner_app/providers/service_providers.dart';
 import 'package:scanner_app/models/scan_quad.dart';
 import 'package:scanner_app/services/camera_capture_service.dart';
 import 'package:scanner_app/services/live_document_detector.dart';
+import 'package:scanner_app/views/document_scan/widgets/id_card_type_selector_view.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_camera_top_bar.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_camera_viewfinder.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_features_bottom_sheet.dart';
@@ -40,6 +44,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   FlashMode _flashMode = FlashMode.off;
   bool _isBatch = false;
   ScanTabMode _tabMode = ScanTabMode.scan;
+  bool _inIdCardCamera = false;
   int _missedFrames = 0;
 
   @override
@@ -101,7 +106,10 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
       Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
 
   void _onModeChanged(ScanTabMode mode) {
-    setState(() => _tabMode = mode);
+    setState(() {
+      _tabMode = mode;
+      _inIdCardCamera = false;
+    });
     final notifier = ref.read(customScanNotifierProvider.notifier);
     switch (mode) {
       case ScanTabMode.scan: notifier.startSession(CustomScanMode.document);
@@ -157,6 +165,25 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   Widget build(BuildContext context) {
     final CustomScanState scan = ref.watch(customScanNotifierProvider);
 
+    // If user is on ID Cards tab and hasn't started the camera yet, show the full ID Card Preset screen!
+    if (_tabMode == ScanTabMode.idCards && !_inIdCardCamera) {
+      return IdCardTypeSelectorView(
+        selectedCategory: scan.idCategory,
+        onCategorySelected: (IdCardCategory cat) {
+          ref.read(customScanNotifierProvider.notifier).selectIdCategory(cat);
+        },
+        onMakeItNow: () {
+          setState(() => _inIdCardCamera = true);
+        },
+        onClose: () => Navigator.of(context).maybePop(),
+        onToggleFlash: _toggleFlash,
+        isFlashOn: _flashMode == FlashMode.torch,
+        tabMode: _tabMode,
+        onTabModeChanged: _onModeChanged,
+        onOpenFeatures: _openFeaturesSheet,
+      );
+    }
+
     if (_initError != null) {
       final String msg = _initError is AppException
           ? (_initError! as AppException).message
@@ -175,21 +202,73 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
       child: Column(
         children: <Widget>[
           ScanCameraTopBar(
-            onClose: () => Navigator.of(context).maybePop(),
+            onClose: () {
+              if (_tabMode == ScanTabMode.idCards && _inIdCardCamera) {
+                setState(() => _inIdCardCamera = false);
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
             flashMode: _flashMode,
             onFlashToggle: _toggleFlash,
           ),
           Expanded(
-            child: ScanCameraViewfinder(
-              controller: _camera.controller!,
-              aspectRatio: _camera.previewAspectRatio,
-              isId: isId,
-              isBatch: _isBatch,
-              normalizedQuad: _detectedQuad,
-              onBatchToggle: (bool val) => setState(() => _isBatch = val),
-              onFocusTap: (Offset pos, Size size) {
-                _camera.triggerFocus(screenPoint: pos, viewSize: size);
-              },
+            child: Stack(
+              children: <Widget>[
+                ScanCameraViewfinder(
+                  controller: _camera.controller!,
+                  aspectRatio: _camera.previewAspectRatio,
+                  isId: isId,
+                  isBatch: _isBatch,
+                  normalizedQuad: _detectedQuad,
+                  onBatchToggle: (bool val) => setState(() => _isBatch = val),
+                  onFocusTap: (Offset pos, Size size) {
+                    _camera.triggerFocus(screenPoint: pos, viewSize: size);
+                  },
+                ),
+                if (isId)
+                  Positioned(
+                    top: 14,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _inIdCardCamera = false),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.72),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white24, width: 1.0),
+                            boxShadow: <BoxShadow>[
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.45),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              const Icon(LucideIcons.creditCard, size: 14, color: Color(0xFF00C292)),
+                              const SizedBox(width: 7),
+                              Text(
+                                '${scan.idCategory.title} • ${scan.idSide == IdScanSide.front ? (scan.idCategory.isSingleSide ? "Document" : "Front Side") : "Back Side"}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              const Icon(LucideIcons.chevronDown, size: 13, color: Colors.white70),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: 6),

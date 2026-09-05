@@ -1,5 +1,6 @@
 import 'package:scanner_app/core/enums/custom_scan_mode.dart';
 import 'package:scanner_app/core/enums/custom_scan_step.dart';
+import 'package:scanner_app/core/enums/id_card_category.dart';
 import 'package:scanner_app/core/enums/id_scan_side.dart';
 import 'package:scanner_app/core/enums/scan_filter.dart';
 import 'package:scanner_app/models/scan_page_draft.dart';
@@ -20,6 +21,7 @@ class CustomScanState {
     this.selectedFilter = ScanFilter.color,
     this.rotationTurns = 0,
     this.idSide = IdScanSide.front,
+    this.idCategory = IdCardCategory.general,
     this.busy = false,
     this.busyMessage,
     this.error,
@@ -38,6 +40,7 @@ class CustomScanState {
   final ScanFilter selectedFilter;
   final int rotationTurns;
   final IdScanSide idSide;
+  final IdCardCategory idCategory;
   final bool busy;
   final String? busyMessage;
   final Object? error;
@@ -52,6 +55,9 @@ class CustomScanState {
     }
     final bool hasFront =
         pages.any((ScanPageDraft p) => p.idSide == IdScanSide.front);
+    if (idCategory.isSingleSide) {
+      return hasFront;
+    }
     final bool hasBack =
         pages.any((ScanPageDraft p) => p.idSide == IdScanSide.back);
     return hasFront && hasBack;
@@ -72,6 +78,7 @@ class CustomScanState {
     ScanFilter? selectedFilter,
     int? rotationTurns,
     IdScanSide? idSide,
+    IdCardCategory? idCategory,
     bool? busy,
     String? busyMessage,
     Object? error,
@@ -95,6 +102,7 @@ class CustomScanState {
       selectedFilter: selectedFilter ?? this.selectedFilter,
       rotationTurns: clearRotation ? 0 : (rotationTurns ?? this.rotationTurns),
       idSide: idSide ?? this.idSide,
+      idCategory: idCategory ?? this.idCategory,
       busy: busy ?? this.busy,
       busyMessage:
           clearBusyMessage ? null : (busyMessage ?? this.busyMessage),

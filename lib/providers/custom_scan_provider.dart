@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:scanner_app/core/enums/custom_scan_mode.dart';
 import 'package:scanner_app/core/enums/custom_scan_step.dart';
 import 'package:scanner_app/core/enums/document_kind.dart';
+import 'package:scanner_app/core/enums/id_card_category.dart';
 import 'package:scanner_app/core/enums/id_scan_side.dart';
 import 'package:scanner_app/core/enums/scan_filter.dart';
 import 'package:scanner_app/core/errors/app_exception.dart';
@@ -21,23 +22,48 @@ part 'custom_scan_provider.g.dart';
 class CustomScanNotifier extends _$CustomScanNotifier {
   final Map<String, String> _filterCache = <String, String>{};
 
-  String _generateDefaultTitle() {
+  String _generateDefaultTitle({IdCardCategory? cat}) {
     final DateTime now = DateTime.now();
     final String date = '${now.month}-${now.day}-${now.year % 100}';
     final String time =
         '${now.hour.toString().padLeft(2, '0')}.${now.minute.toString().padLeft(2, '0')}';
+    if (cat != null) {
+      return '${cat.title} $date $time';
+    }
     return 'CamScanner $date $time';
   }
 
   @override
   CustomScanState build() => CustomScanState(documentTitle: _generateDefaultTitle());
 
-  void startSession(CustomScanMode mode) {
+  void startSession(CustomScanMode mode, {IdCardCategory? idCategory}) {
     _filterCache.clear();
+    final IdCardCategory cat = idCategory ?? state.idCategory;
     state = CustomScanState(
       mode: mode,
       idSide: IdScanSide.front,
-      documentTitle: _generateDefaultTitle(),
+      idCategory: cat,
+      documentTitle: _generateDefaultTitle(
+        cat: mode == CustomScanMode.idCard ? cat : null,
+      ),
+    );
+  }
+
+  void selectIdCategory(IdCardCategory category) {
+    state = state.copyWith(
+      idCategory: category,
+      documentTitle: _generateDefaultTitle(cat: category),
+    );
+  }
+
+  void prepareScanBackSide() {
+    state = state.copyWith(
+      step: CustomScanStep.capture,
+      idSide: IdScanSide.back,
+      clearPending: true,
+      clearWarped: true,
+      clearRotation: true,
+      clearError: true,
     );
   }
 
@@ -375,23 +401,43 @@ class CustomScanNotifier extends _$CustomScanNotifier {
     final String front = state.pages
         .firstWhere((ScanPageDraft p) => p.idSide == IdScanSide.front)
         .imagePath;
-    final String back = state.pages
-        .firstWhere((ScanPageDraft p) => p.idSide == IdScanSide.back)
-        .imagePath;
+
+    final String prefix = state.idCategory.filePrefix;
+    final String docTitle = state.documentTitle?.trim().isNotEmpty == true
+        ? state.documentTitle!.trim()
+        : FileNameUtils.stamped(state.idCategory.title);
+
     final String pdfPath = p.join(
       (await getTemporaryDirectory()).path,
-      FileNameUtils.withExtension(FileNameUtils.stamped('id_card'), 'pdf'),
+      FileNameUtils.withExtension(FileNameUtils.stamped(prefix.toLowerCase()), 'pdf'),
     );
-    await ref.read(pdfServiceProvider).createIdCardA4(
-          frontImagePath: front,
-          backImagePath: back,
-          outputPath: pdfPath,
-        );
-    await ref.read(storageServiceProvider).persistGeneratedPdf(
-          kind: DocumentKind.idCard,
-          title: FileNameUtils.stamped('ID Card'),
-          sourcePdfPath: pdfPath,
-          sourceImagePaths: <String>[front, back],
-        );
+
+    if (state.idCategory.isSingleSide) {
+      await ref.read(pdfServiceProvider).createSingleCardA4(
+            imagePath: front,
+            outputPath: pdfPath,
+          );
+      await ref.read(storageServiceProvider).persistGeneratedPdf(
+            kind: DocumentKind.idCard,
+            title: docTitle,
+            sourcePdfPath: pdfPath,
+            sourceImagePaths: <String>[front],
+          );
+    } else {
+      final String back = state.pages
+          .firstWhere((ScanPageDraft p) => p.idSide == IdScanSide.back)
+          .imagePath;
+      await ref.read(pdfServiceProvider).createIdCardA4(
+            frontImagePath: front,
+            backImagePath: back,
+            outputPath: pdfPath,
+          );
+      await ref.read(storageServiceProvider).persistGeneratedPdf(
+            kind: DocumentKind.idCard,
+            title: docTitle,
+            sourcePdfPath: pdfPath,
+            sourceImagePaths: <String>[front, back],
+          );
+    }
   }
 }
