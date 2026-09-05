@@ -465,7 +465,7 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
       body: SafeArea(
         child: Column(
           children: <Widget>[
-            // Ultra-Premium Top Navigation Bar
+            // Ultra-Premium Symmetrical Top Navigation Bar
             Container(
               decoration: BoxDecoration(
                 color: const Color(0xFF0F1217),
@@ -476,10 +476,10 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                   ),
                 ),
               ),
-              padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               child: Row(
                 children: <Widget>[
-                  // Left: Tactile Frosted Back Button
+                  // Left: Modern Frosted Back Button
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
@@ -489,176 +489,164 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                               HapticFeedback.lightImpact();
                               _confirmDiscardScan();
                             },
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                       child: Container(
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF191D25),
-                          borderRadius: BorderRadius.circular(12),
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.10),
+                            color: Colors.white.withValues(alpha: 0.08),
                             width: 0.8,
                           ),
-                          boxShadow: <BoxShadow>[
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.35),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
                         ),
                         child: const Icon(
                           Icons.arrow_back_ios_new_rounded,
                           color: Colors.white,
-                          size: 15,
+                          size: 16,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
 
-                  // Center: Document Title Badge with Icon and Pencil
+                  // Center: Document Title & Live Status
                   Expanded(
-                    child: Center(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: scan.busy
-                              ? null
-                              : () {
-                                  HapticFeedback.lightImpact();
-                                  _showRenameDialog(currentTitle);
-                                },
-                          borderRadius: BorderRadius.circular(20),
-                          child: Container(
-                            height: 36,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: <Color>[
-                                  Color(0xFF1E232E),
-                                  Color(0xFF161920),
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.10),
-                                width: 0.8,
-                              ),
-                              boxShadow: <BoxShadow>[
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.30),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                Container(
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: _accent.withValues(alpha: 0.15),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.description_outlined,
-                                    color: _accent,
-                                    size: 11.5,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    currentTitle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  width: 18,
-                                  height: 18,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.06),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.edit_rounded,
-                                    color: Colors.white60,
-                                    size: 10,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-
-                  // Right: Glowing CamScanner Accent "+ Page" Action Pill
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
+                    child: GestureDetector(
                       onTap: scan.busy
                           ? null
                           : () {
                               HapticFeedback.lightImpact();
-                              _showAddPageSheet();
+                              _showRenameDialog(currentTitle);
                             },
-                      borderRadius: BorderRadius.circular(18),
-                      child: Container(
-                        height: 34,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: <Color>[
-                              Color(0xFF00E5A3),
-                              Color(0xFF00B589),
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Flexible(
+                                child: Text(
+                                  currentTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.1,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Icon(
+                                Icons.edit_outlined,
+                                color: _accent.withValues(alpha: 0.85),
+                                size: 13,
+                              ),
                             ],
                           ),
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: <BoxShadow>[
-                            BoxShadow(
-                              color: _accent.withValues(alpha: 0.35),
-                              blurRadius: 10,
-                              offset: const Offset(0, 2),
+                          const SizedBox(height: 2),
+                          Text(
+                            isOnAddCard
+                                ? 'Add new page'
+                                : 'Page ${_carouselIndex + 1} of $totalPages · Tap to rename',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
                             ),
-                          ],
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+
+                  // Right: Balanced More Options Menu Button
+                  PopupMenuButton<String>(
+                    tooltip: 'More options',
+                    padding: EdgeInsets.zero,
+                    color: const Color(0xFF1B1E26),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.10),
+                        width: 0.8,
+                      ),
+                    ),
+                    onSelected: (String value) {
+                      HapticFeedback.lightImpact();
+                      if (value == 'rename') {
+                        _showRenameDialog(currentTitle);
+                      } else if (value == 'fullscreen') {
+                        _openFullscreenViewer(activePath, activeRotation);
+                      } else if (value == 'discard') {
+                        _confirmDiscardScan();
+                      }
+                    },
+                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'rename',
+                        height: 40,
+                        child: Row(
                           children: <Widget>[
-                            Icon(
-                              Icons.add_rounded,
-                              color: Color(0xFF081C15),
-                              size: 16,
-                            ),
-                            SizedBox(width: 3),
+                            Icon(Icons.drive_file_rename_outline_rounded, color: _accent, size: 17),
+                            SizedBox(width: 10),
                             Text(
-                              'Page',
-                              style: TextStyle(
-                                color: Color(0xFF081C15),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.3,
-                              ),
+                              'Rename Document',
+                              style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500),
                             ),
                           ],
                         ),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'fullscreen',
+                        height: 40,
+                        child: Row(
+                          children: <Widget>[
+                            Icon(Icons.fullscreen_rounded, color: Colors.white70, size: 18),
+                            SizedBox(width: 10),
+                            Text(
+                              'Fullscreen View',
+                              style: TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(height: 1),
+                      const PopupMenuItem<String>(
+                        value: 'discard',
+                        height: 40,
+                        child: Row(
+                          children: <Widget>[
+                            Icon(Icons.delete_outline_rounded, color: Color(0xFFFF5252), size: 17),
+                            SizedBox(width: 10),
+                            Text(
+                              'Discard Scan',
+                              style: TextStyle(color: Color(0xFFFF5252), fontSize: 13.5, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.more_horiz_rounded,
+                        color: Colors.white70,
+                        size: 19,
                       ),
                     ),
                   ),
