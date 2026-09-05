@@ -685,63 +685,68 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
               ),
             ),
 
-            // Slender, Minimalist Page Pill
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF161920),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white10, width: 0.8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    GestureDetector(
-                      onTap: () {
-                        if (_carouselIndex > 0) {
-                          _pageController.previousPage(
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeInOut,
-                          );
-                        }
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: Icon(
-                        Icons.chevron_left_rounded,
-                        color: _carouselIndex > 0 ? Colors.white70 : Colors.white24,
-                        size: 18,
+            // Slender, Minimalist Page Pill (hidden on Add Page card to remove redundant text)
+            AnimatedOpacity(
+              opacity: isOnAddCard ? 0.0 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161920),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white10, width: 0.8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      GestureDetector(
+                        onTap: () {
+                          if (_carouselIndex > 0) {
+                            _pageController.previousPage(
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeInOut,
+                            );
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: Icon(
+                          Icons.chevron_left_rounded,
+                          color: _carouselIndex > 0 ? Colors.white70 : Colors.white24,
+                          size: 18,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isOnAddCard ? '+ Add Page' : '${_carouselIndex + 1} / $totalPages',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
+                      const SizedBox(width: 6),
+                      Text(
+                        '${_carouselIndex + 1} / $totalPages',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () {
-                        if (_carouselIndex < totalPages) {
-                          _pageController.nextPage(
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeInOut,
-                          );
-                        }
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: Icon(
-                        Icons.chevron_right_rounded,
-                        color: _carouselIndex < totalPages ? Colors.white70 : Colors.white24,
-                        size: 18,
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () {
+                          if (_carouselIndex < totalPages) {
+                            _pageController.nextPage(
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeInOut,
+                            );
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          color: _carouselIndex < totalPages ? Colors.white70 : Colors.white24,
+                          size: 18,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
