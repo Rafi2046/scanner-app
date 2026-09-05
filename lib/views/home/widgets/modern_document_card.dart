@@ -24,21 +24,31 @@ class ModernDocumentCard extends StatelessWidget {
 
   static final DateFormat _dateFormat = DateFormat.yMMMd().add_jm();
 
-  void _defaultShare() {
-    if (document.hasPdf && File(document.pdfPath!).existsSync()) {
-      SharePlus.instance.share(
-        ShareParams(
-          files: <XFile>[XFile(document.pdfPath!)],
-          text: document.title,
-        ),
-      );
-    } else if (document.imagePaths.isNotEmpty) {
-      SharePlus.instance.share(
-        ShareParams(
-          files: document.imagePaths.map((String p) => XFile(p)).toList(),
-          text: document.title,
-        ),
-      );
+  void _defaultShare(BuildContext context) async {
+    try {
+      if (document.hasPdf && File(document.pdfPath!).existsSync()) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: <XFile>[XFile(document.pdfPath!)],
+            text: document.title,
+          ),
+        );
+      } else if (document.imagePaths.isNotEmpty) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: document.imagePaths.map((String p) => XFile(p)).toList(),
+            text: document.title,
+          ),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please restart app to activate sharing module.'),
+          ),
+        );
+      }
     }
   }
 
@@ -100,7 +110,7 @@ class ModernDocumentCard extends StatelessWidget {
                 ),
                 IconButton(
                   tooltip: 'Share',
-                  onPressed: onShare ?? _defaultShare,
+                  onPressed: onShare ?? () => _defaultShare(context),
                   icon: const Icon(
                     Icons.ios_share_rounded,
                     size: 20,

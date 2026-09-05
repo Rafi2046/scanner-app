@@ -68,13 +68,25 @@ class _DocumentPreviewViewState extends State<DocumentPreviewView> {
             IconButton(
               tooltip: 'Share PDF',
               icon: const Icon(Icons.ios_share_rounded, size: 20),
-              onPressed: () {
-                SharePlus.instance.share(
-                  ShareParams(
-                    files: <XFile>[XFile(widget.pdfPath)],
-                    text: widget.title,
-                  ),
-                );
+              onPressed: () async {
+                try {
+                  await SharePlus.instance.share(
+                    ShareParams(
+                      files: <XFile>[XFile(widget.pdfPath)],
+                      text: widget.title,
+                    ),
+                  );
+                } catch (_) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Please restart app to activate sharing module.',
+                        ),
+                      ),
+                    );
+                  }
+                }
               },
             ),
         ],

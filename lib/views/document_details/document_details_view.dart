@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -214,26 +215,35 @@ class _DocumentDetailsViewState extends ConsumerState<DocumentDetailsView> {
 
   Future<void> _shareDocument(ScannedDocument doc) async {
     HapticFeedback.lightImpact();
-    if (doc.hasPdf && File(doc.pdfPath!).existsSync()) {
-      await SharePlus.instance.share(
-        ShareParams(
-          files: <XFile>[XFile(doc.pdfPath!)],
-          text: doc.title,
-        ),
-      );
-    } else if (doc.imagePaths.isNotEmpty) {
-      await SharePlus.instance.share(
-        ShareParams(
-          files: doc.imagePaths.map((String p) => XFile(p)).toList(),
-          text: doc.title,
-        ),
-      );
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No files available to share.')),
+    try {
+      if (doc.hasPdf && File(doc.pdfPath!).existsSync()) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: <XFile>[XFile(doc.pdfPath!)],
+            text: doc.title,
+          ),
         );
+      } else if (doc.imagePaths.isNotEmpty) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: doc.imagePaths.map((String p) => XFile(p)).toList(),
+            text: doc.title,
+          ),
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No files available to share.')),
+          );
+        }
       }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please restart app to activate sharing module.'),
+        ),
+      );
     }
   }
 
@@ -659,19 +669,6 @@ class _DocumentDetailsViewState extends ConsumerState<DocumentDetailsView> {
                 ),
               ),
 
-              // Smart OCR AI Banner (CamScanner inspired)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppConstants.pagePadding,
-                    AppConstants.spaceSm,
-                    AppConstants.pagePadding,
-                    AppConstants.spaceLg,
-                  ),
-                  child: _buildSmartBanner(doc),
-                ),
-              ),
-
               // Clearance for bottom action bar
               const SliverToBoxAdapter(
                 child: SizedBox(height: 90),
@@ -791,60 +788,65 @@ class _DocumentDetailsViewState extends ConsumerState<DocumentDetailsView> {
     );
   }
 
-  /// Add Page card (+ icon) with dashed/soft border
+  /// Add Page card (+ icon) with dashed/dot-dot border
   Widget _buildAddPageCard(ScannedDocument doc) {
     return Column(
       children: <Widget>[
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: AppTheme.primarySoft.withValues(alpha: 0.6),
+              color: AppTheme.primarySoft.withValues(alpha: 0.45),
               borderRadius: BorderRadius.circular(AppConstants.radiusLg),
-              border: Border.all(
-                color: AppTheme.primary.withValues(alpha: 0.35),
-                width: 1.5,
-              ),
             ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(AppConstants.radiusLg),
-                onTap: () => _showAddPageSheet(doc),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: const BoxDecoration(
-                          color: AppTheme.surfaceColor,
-                          shape: BoxShape.circle,
+            child: CustomPaint(
+              foregroundPainter: const _DashedBorderPainter(
+                color: Color(0xCC3B6FF5),
+                strokeWidth: 1.8,
+                dashLength: 6.0,
+                gapLength: 4.5,
+                borderRadius: AppConstants.radiusLg,
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(AppConstants.radiusLg),
+                  onTap: () => _showAddPageSheet(doc),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: const BoxDecoration(
+                            color: AppTheme.surfaceColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.add_a_photo_outlined,
+                            color: AppTheme.primary,
+                            size: 26,
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.add_a_photo_outlined,
-                          color: AppTheme.primary,
-                          size: 26,
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Add Page',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.primary,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'Add Page',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.primary,
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Scan or Import',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'Scan or Import',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.textSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -857,66 +859,6 @@ class _DocumentDetailsViewState extends ConsumerState<DocumentDetailsView> {
           style: TextStyle(fontSize: 13),
         ),
       ],
-    );
-  }
-
-  /// AI / OCR Smart recommendation banner (CamScanner style)
-  Widget _buildSmartBanner(ScannedDocument doc) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(AppConstants.radiusMd),
-        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.25)),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: AppTheme.primary.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppConstants.radiusMd),
-          onTap: () {
-            final String? firstPath = doc.imagePaths.firstOrNull;
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => OcrResultView(initialImagePath: firstPath),
-              ),
-            );
-          },
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: <Widget>[
-                Icon(
-                  Icons.auto_awesome_rounded,
-                  color: AppTheme.primary,
-                  size: 20,
-                ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Extract text from document (AI OCR)',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 13,
-                  color: AppTheme.primary,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -1132,6 +1074,26 @@ class _FullScreenViewerState extends ConsumerState<_FullScreenViewer> {
     );
   }
 
+  Future<void> _shareCurrentPage(ScannedDocument doc) async {
+    try {
+      if (doc.imagePaths.isNotEmpty) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: <XFile>[XFile(doc.imagePaths[_currentIndex])],
+            text: '${doc.title} - Page ${_currentIndex + 1}',
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please restart app to activate sharing module.'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final List<ScannedDocument>? docs =
@@ -1169,16 +1131,7 @@ class _FullScreenViewerState extends ConsumerState<_FullScreenViewer> {
           IconButton(
             tooltip: 'Share Page',
             icon: const Icon(Icons.ios_share_rounded, size: 20),
-            onPressed: () {
-              if (doc.imagePaths.isNotEmpty) {
-                SharePlus.instance.share(
-                  ShareParams(
-                    files: <XFile>[XFile(doc.imagePaths[_currentIndex])],
-                    text: '${doc.title} - Page ${_currentIndex + 1}',
-                  ),
-                );
-              }
-            },
+            onPressed: () => _shareCurrentPage(doc),
           ),
           if (totalPages > 1)
             IconButton(
@@ -1257,3 +1210,66 @@ class _FullScreenViewerState extends ConsumerState<_FullScreenViewer> {
     );
   }
 }
+
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({
+    required this.color,
+    required this.strokeWidth,
+    required this.dashLength,
+    required this.gapLength,
+    required this.borderRadius,
+  });
+
+  final Color color;
+  final double strokeWidth;
+  final double dashLength;
+  final double gapLength;
+  final double borderRadius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Paint paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final double inset = strokeWidth / 2.0;
+    final RRect rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        inset,
+        inset,
+        size.width - strokeWidth,
+        size.height - strokeWidth,
+      ),
+      Radius.circular(borderRadius),
+    );
+
+    final Path path = Path()..addRRect(rrect);
+    final Path dashedPath = Path();
+
+    for (final ui.PathMetric metric in path.computeMetrics()) {
+      double distance = 0.0;
+      while (distance < metric.length) {
+        final double len = (distance + dashLength < metric.length)
+            ? dashLength
+            : metric.length - distance;
+        dashedPath.addPath(
+          metric.extractPath(distance, distance + len),
+          Offset.zero,
+        );
+        distance += dashLength + gapLength;
+      }
+    }
+
+    canvas.drawPath(dashedPath, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.dashLength != dashLength ||
+      oldDelegate.gapLength != gapLength ||
+      oldDelegate.borderRadius != borderRadius;
+}
+
