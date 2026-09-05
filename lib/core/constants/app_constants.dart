@@ -19,6 +19,10 @@ abstract final class AppConstants {
   static const int compressJpegQuality = 40;
   static const int compressMaxEdge = 1280;
 
+  /// Max width/height after capture before edge detect / filters (OOM guard).
+  static const int scanMaxEdge = 1920;
+  static const int scanJpegQuality = 90;
+
   // --- Layout spacing ---
   static const double spaceXs = 4;
   static const double spaceSm = 8;
@@ -37,8 +41,8 @@ abstract final class AppConstants {
   static const double radiusPill = 28;
 
   // --- Component sizes ---
-  static const double toolCircleSize = 52;
-  static const double toolIconSize = 24;
+  static const double toolCircleSize = 32;
+  static const double toolIconSize = 16;
   static const double thumbWidth = 52;
   static const double thumbHeight = 64;
   static const double fabSize = 58;
