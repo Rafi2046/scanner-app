@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show PathMetric;
 
 import 'package:flutter/material.dart';
@@ -32,6 +33,79 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
   int _scanTrigger = 1;
   String? _previousPath;
   int _carouselIndex = 0;
+  double? _baseDocumentAspectRatio;
+  String? _lastResolvedPath;
+
+  /// Rapid synchronous JPEG header dimension reader.
+  static Size? _getJpegSize(String path) {
+    try {
+      final File file = File(path);
+      if (!file.existsSync()) return null;
+      final RandomAccessFile raf = file.openSync(mode: FileMode.read);
+      try {
+        final Uint8List header = raf.readSync(math.min(4096, raf.lengthSync()));
+        if (header.length < 4 || header[0] != 0xFF || header[1] != 0xD8) {
+          return null;
+        }
+        int i = 2;
+        while (i < header.length - 8) {
+          if (header[i] != 0xFF) {
+            i++;
+            continue;
+          }
+          final int marker = header[i + 1];
+          if (marker == 0xC0 || marker == 0xC1 || marker == 0xC2) {
+            final int h = (header[i + 5] << 8) | header[i + 6];
+            final int w = (header[i + 7] << 8) | header[i + 8];
+            if (w > 0 && h > 0) return Size(w.toDouble(), h.toDouble());
+          }
+          if (i + 3 >= header.length) break;
+          final int len = (header[i + 2] << 8) | header[i + 3];
+          if (len <= 0) break;
+          i += 2 + len;
+        }
+      } finally {
+        raf.closeSync();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  void _resolveDocumentAspectRatio(String path) {
+    if (path.isEmpty || path == _lastResolvedPath) return;
+    _lastResolvedPath = path;
+
+    // 1. Fast synchronous JPEG dimension extraction
+    final Size? size = _getJpegSize(path);
+    if (size != null && size.width > 0 && size.height > 0) {
+      final double ratio = size.width / size.height;
+      if (_baseDocumentAspectRatio != ratio) {
+        _baseDocumentAspectRatio = ratio;
+      }
+      return;
+    }
+
+    // 2. Fallback to Flutter ImageStream
+    if (!File(path).existsSync()) return;
+    final Image image = Image.file(File(path));
+    image.image.resolve(ImageConfiguration.empty).addListener(
+      ImageStreamListener(
+        (ImageInfo info, bool _) {
+          final double w = info.image.width.toDouble();
+          final double h = info.image.height.toDouble();
+          if (w > 0 && h > 0) {
+            final double ratio = w / h;
+            if (mounted && (_baseDocumentAspectRatio == null || (_baseDocumentAspectRatio! - ratio).abs() > 0.005)) {
+              setState(() {
+                _baseDocumentAspectRatio = ratio;
+              });
+            }
+          }
+        },
+        onError: (Object error, StackTrace? stackTrace) {},
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -47,6 +121,7 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
   @override
   void reassemble() {
     super.reassemble();
+    _lastResolvedPath = null;
     // Recreate controller on hot reload to force viewportFraction 1.0
     final int curr = _pageController.hasClients
         ? (_pageController.page?.round() ?? _carouselIndex)
@@ -381,6 +456,10 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
         ? pages[_carouselIndex].filter
         : scan.selectedFilter;
 
+    if (activePath.isNotEmpty) {
+      _resolveDocumentAspectRatio(activePath);
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F1217),
       body: SafeArea(
@@ -504,14 +583,19 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                   }
                 },
                 itemBuilder: (BuildContext context, int index) {
+                  final double baseRatio = _baseDocumentAspectRatio ?? (1 / 1.414);
                   if (index == totalPages) {
-                    return _buildAddPagesCard(scan);
+                    final int lastRotation = pages.isNotEmpty ? pages.last.rotationTurns : 0;
+                    final double addPageRatio = (lastRotation % 2 == 1) ? (1.0 / baseRatio) : baseRatio;
+                    return _buildAddPagesCard(scan, addPageRatio);
                   }
+                  final double pageRatio = (pages[index].rotationTurns % 2 == 1) ? (1.0 / baseRatio) : baseRatio;
                   return _buildDocumentPageCard(
                     page: pages[index],
                     index: index,
                     totalPages: totalPages,
                     scanBusy: scan.busy,
+                    aspectRatio: pageRatio,
                   );
                 },
               ),
@@ -622,38 +706,42 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     required int index,
     required int totalPages,
     required bool scanBusy,
+    required double aspectRatio,
   }) {
     final String pageImgPath = page.imagePath;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Center(
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.65),
-                blurRadius: 24,
-                spreadRadius: 2,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Stack(
-              alignment: Alignment.center,
-              children: <Widget>[
-                RotatedBox(
-                  quarterTurns: page.rotationTurns,
-                  child: DocumentScanBeam(
-                    trigger: _scanTrigger,
-                    imagePath: pageImgPath,
-                    previousImagePath: _previousPath ?? page.rawPath,
-                    duration: const Duration(milliseconds: 1350),
-                  ),
+        child: AspectRatio(
+          aspectRatio: aspectRatio,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  blurRadius: 24,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 8),
                 ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                fit: StackFit.expand,
+                alignment: Alignment.center,
+                children: <Widget>[
+                  RotatedBox(
+                    quarterTurns: page.rotationTurns,
+                    child: DocumentScanBeam(
+                      trigger: _scanTrigger,
+                      imagePath: pageImgPath,
+                      previousImagePath: _previousPath ?? page.rawPath,
+                      duration: const Duration(milliseconds: 1350),
+                    ),
+                  ),
 
                 // Top-left: Small page tag
                 Positioned(
@@ -730,32 +818,32 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// Builds a clean, full-size "+ Add Pages" sheet card with real document aspect ratio.
-  Widget _buildAddPagesCard(CustomScanState scan) {
+  Widget _buildAddPagesCard(CustomScanState scan, double aspectRatio) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Center(
         child: AspectRatio(
-          // Standard A4 document sheet aspect ratio (1 / 1.414) matching real pages
-          aspectRatio: 1 / 1.414,
+          aspectRatio: aspectRatio,
           child: GestureDetector(
             onTap: scan.busy ? null : _showAddPageSheet,
             behavior: HitTestBehavior.opaque,
             child: CustomPaint(
-              painter: const _DashedBorderPainter(
-                color: Color(0x6600D2A0),
-                strokeWidth: 1.6,
-                dashLength: 8.0,
-                gapLength: 6.0,
-                borderRadius: 16.0,
+              foregroundPainter: const _DashedBorderPainter(
+                color: Color(0xCC00D2A0),
+                strokeWidth: 1.8,
+                dashLength: 7.0,
+                gapLength: 5.0,
+                borderRadius: 12.0,
               ),
               child: Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFF14171E),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                   boxShadow: <BoxShadow>[
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.45),
@@ -921,8 +1009,9 @@ class _DashedBorderPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke;
 
+    final double inset = strokeWidth / 2.0;
     final RRect rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
+      Rect.fromLTWH(inset, inset, size.width - strokeWidth, size.height - strokeWidth),
       Radius.circular(borderRadius),
     );
 
