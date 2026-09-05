@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:scanner_app/app/theme.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/views/home/widgets/tool_circle_item.dart';
 
-/// 2×4 pastel quick-tools grid on Home.
+/// 2×4 monochrome Lucide quick-tools grid on Home.
 class HomeQuickTools extends StatelessWidget {
   const HomeQuickTools({
     super.key,
@@ -28,62 +28,73 @@ class HomeQuickTools extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 4,
-      mainAxisSpacing: AppConstants.spaceMd,
-      crossAxisSpacing: AppConstants.spaceSm,
-      childAspectRatio: 0.78,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        ToolCircleItem(
-          icon: Icons.document_scanner_rounded,
-          label: 'Scan',
-          color: AppTheme.accentOrange,
-          onTap: onSmartScan,
+        _ToolsRow(
+          children: <Widget>[
+            ToolCircleItem(
+              icon: LucideIcons.scanLine,
+              label: 'Scan',
+              onTap: onSmartScan,
+            ),
+            ToolCircleItem(
+              icon: LucideIcons.creditCard,
+              label: 'ID Card',
+              onTap: onIdCard,
+            ),
+            ToolCircleItem(
+              icon: LucideIcons.pencil,
+              label: 'eSign',
+              onTap: onSign,
+            ),
+            ToolCircleItem(
+              icon: LucideIcons.stamp,
+              label: 'Watermark',
+              onTap: onWatermark,
+            ),
+          ],
         ),
-        ToolCircleItem(
-          icon: Icons.badge_outlined,
-          label: 'ID Card',
-          color: AppTheme.accentBrown,
-          onTap: onIdCard,
+        const SizedBox(height: AppConstants.spaceMd),
+        _ToolsRow(
+          children: <Widget>[
+            ToolCircleItem(
+              icon: LucideIcons.combine,
+              label: 'Merge',
+              onTap: onMergePdf,
+            ),
+            ToolCircleItem(
+              icon: LucideIcons.lock,
+              label: 'Protect',
+              onTap: onProtect,
+            ),
+            ToolCircleItem(
+              icon: LucideIcons.type,
+              label: 'OCR',
+              onTap: onOcr,
+            ),
+            ToolCircleItem(
+              icon: LucideIcons.layoutGrid,
+              label: 'All Tools',
+              onTap: onAllTools,
+            ),
+          ],
         ),
-        ToolCircleItem(
-          icon: Icons.draw_outlined,
-          label: 'eSign',
-          color: AppTheme.accentRed,
-          onTap: onSign,
-        ),
-        ToolCircleItem(
-          icon: Icons.branding_watermark_outlined,
-          label: 'Watermark',
-          color: AppTheme.accentPurple,
-          onTap: onWatermark,
-        ),
-        ToolCircleItem(
-          icon: Icons.call_merge_rounded,
-          label: 'Merge',
-          color: AppTheme.accentPink,
-          onTap: onMergePdf,
-        ),
-        ToolCircleItem(
-          icon: Icons.lock_outline_rounded,
-          label: 'Protect',
-          color: AppTheme.accentTeal,
-          onTap: onProtect,
-        ),
-        ToolCircleItem(
-          icon: Icons.text_fields_rounded,
-          label: 'OCR',
-          color: AppTheme.accentGold,
-          onTap: onOcr,
-        ),
-        ToolCircleItem(
-          icon: Icons.grid_view_rounded,
-          label: 'All Tools',
-          color: AppTheme.accentBlue,
-          onTap: onAllTools,
-        ),
+      ],
+    );
+  }
+}
+
+class _ToolsRow extends StatelessWidget {
+  const _ToolsRow({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        for (final Widget child in children) Expanded(child: child),
       ],
     );
   }

@@ -82,7 +82,7 @@ class HomeTabView extends StatelessWidget {
                   onProtect: onProtect,
                   onAllTools: onAllTools,
                 ),
-                const SizedBox(height: AppConstants.spaceXl),
+                const SizedBox(height: AppConstants.spaceLg),
                 RecentFilesHeader(
                   count: library.valueOrNull?.length,
                   onSeeAll: onAllTools,
