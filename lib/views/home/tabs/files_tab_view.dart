@@ -19,6 +19,7 @@ class FilesTabView extends StatefulWidget {
     required this.onIdScan,
     required this.onMerge,
     required this.onDelete,
+    this.onTapDocument,
     required this.onRefresh,
   });
 
@@ -27,6 +28,7 @@ class FilesTabView extends StatefulWidget {
   final VoidCallback onIdScan;
   final VoidCallback onMerge;
   final ValueChanged<String> onDelete;
+  final ValueChanged<ScannedDocument>? onTapDocument;
   final Future<void> Function() onRefresh;
 
   @override
@@ -106,6 +108,7 @@ class _FilesTabViewState extends State<FilesTabView> {
                 physics: const NeverScrollableScrollPhysics(),
                 padding: EdgeInsets.zero,
                 documents: filtered,
+                onTap: widget.onTapDocument,
                 onDelete: widget.onDelete,
               );
             },

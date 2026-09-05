@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:scanner_app/app/theme.dart';
 import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/models/scanned_document.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Soft card row for a recent file (share + more actions).
 class ModernDocumentCard extends StatelessWidget {
@@ -22,6 +23,24 @@ class ModernDocumentCard extends StatelessWidget {
   final VoidCallback? onShare;
 
   static final DateFormat _dateFormat = DateFormat.yMMMd().add_jm();
+
+  void _defaultShare() {
+    if (document.hasPdf && File(document.pdfPath!).existsSync()) {
+      SharePlus.instance.share(
+        ShareParams(
+          files: <XFile>[XFile(document.pdfPath!)],
+          text: document.title,
+        ),
+      );
+    } else if (document.imagePaths.isNotEmpty) {
+      SharePlus.instance.share(
+        ShareParams(
+          files: document.imagePaths.map((String p) => XFile(p)).toList(),
+          text: document.title,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +100,7 @@ class ModernDocumentCard extends StatelessWidget {
                 ),
                 IconButton(
                   tooltip: 'Share',
-                  onPressed: onShare,
+                  onPressed: onShare ?? _defaultShare,
                   icon: const Icon(
                     Icons.ios_share_rounded,
                     size: 20,

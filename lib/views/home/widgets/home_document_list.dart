@@ -7,6 +7,7 @@ class HomeDocumentList extends StatelessWidget {
     super.key,
     required this.documents,
     required this.onDelete,
+    this.onTap,
     this.physics,
     this.shrinkWrap = false,
     this.padding = const EdgeInsets.only(bottom: 88),
@@ -14,6 +15,7 @@ class HomeDocumentList extends StatelessWidget {
 
   final List<ScannedDocument> documents;
   final ValueChanged<String> onDelete;
+  final ValueChanged<ScannedDocument>? onTap;
   final ScrollPhysics? physics;
   final bool shrinkWrap;
   final EdgeInsetsGeometry padding;
@@ -29,6 +31,7 @@ class HomeDocumentList extends StatelessWidget {
         final ScannedDocument document = documents[index];
         return ModernDocumentCard(
           document: document,
+          onTap: onTap != null ? () => onTap!(document) : null,
           onDelete: () => onDelete(document.id),
         );
       },

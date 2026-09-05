@@ -8,7 +8,9 @@ import 'package:scanner_app/views/widgets/error_snackbar.dart';
 
 /// Ultra-premium full-screen AI OCR Reader & Tool View.
 class OcrResultView extends ConsumerStatefulWidget {
-  const OcrResultView({super.key});
+  const OcrResultView({super.key, this.initialImagePath});
+
+  final String? initialImagePath;
 
   @override
   ConsumerState<OcrResultView> createState() => _OcrResultViewState();
@@ -21,6 +23,19 @@ class _OcrResultViewState extends ConsumerState<OcrResultView> {
 
   double _fontSize = 15.0;
   bool _copied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialImagePath != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref
+            .read(ocrNotifierProvider.notifier)
+            .extractTextFromImage(widget.initialImagePath!);
+      });
+    }
+  }
 
   void _onCopy(String text) async {
     await Clipboard.setData(ClipboardData(text: text));

@@ -10,6 +10,7 @@ import 'package:scanner_app/core/utils/file_name_utils.dart';
 import 'package:scanner_app/models/folder_item.dart';
 import 'package:scanner_app/models/library_index.dart';
 import 'package:scanner_app/models/scanned_document.dart';
+import 'package:scanner_app/services/pdf_service.dart';
 import 'package:uuid/uuid.dart';
 
 /// Permanent local storage: directories, file persistence, and JSON library index.
@@ -206,6 +207,107 @@ class StorageService {
     await _ensureReady();
     await _upsertDocument(document);
     return document;
+  }
+
+  Future<ScannedDocument> renameDocument(String id, String newTitle) async {
+    await _ensureReady();
+    final String trimmed = newTitle.trim();
+    if (trimmed.isEmpty) {
+      throw const StorageException('Document title cannot be empty.');
+    }
+    final ScannedDocument? existing = await getDocument(id);
+    if (existing == null) {
+      throw StorageException('Document $id was not found.');
+    }
+    final ScannedDocument updated = existing.copyWith(title: trimmed);
+    await _upsertDocument(updated);
+    return updated;
+  }
+
+  Future<ScannedDocument> addPagesToDocument({
+    required String id,
+    required List<String> newTempImages,
+    required PdfService pdfService,
+  }) async {
+    await _ensureReady();
+    final ScannedDocument? existing = await getDocument(id);
+    if (existing == null) {
+      throw StorageException('Document $id was not found.');
+    }
+    if (newTempImages.isEmpty) {
+      return existing;
+    }
+
+    final Directory docDir = await _documentDirectoryFor(existing.kind, id);
+    final List<String> currentImages = List<String>.from(existing.imagePaths);
+    int nextIndex = currentImages.length + 1;
+
+    for (final String tempPath in newTempImages) {
+      final String ext =
+          p.extension(tempPath).isEmpty ? '.jpg' : p.extension(tempPath);
+      final String destPath = p.join(
+        docDir.path,
+        FileNameUtils.withExtension('page_${DateTime.now().millisecondsSinceEpoch}_$nextIndex', ext),
+      );
+      await _copyFile(tempPath, destPath);
+      currentImages.add(destPath);
+      nextIndex++;
+    }
+
+    final String? pdfPath = existing.pdfPath;
+    if (pdfPath != null && pdfPath.isNotEmpty) {
+      await pdfService.createDocumentPdfFromImages(
+        imagePaths: currentImages,
+        outputPath: pdfPath,
+      );
+    }
+
+    final ScannedDocument updated = existing.copyWith(
+      pageCount: currentImages.length,
+      imagePaths: currentImages,
+    );
+    await _upsertDocument(updated);
+    return updated;
+  }
+
+  Future<ScannedDocument> deletePageFromDocument({
+    required String id,
+    required int pageIndex,
+    required PdfService pdfService,
+  }) async {
+    await _ensureReady();
+    final ScannedDocument? existing = await getDocument(id);
+    if (existing == null) {
+      throw StorageException('Document $id was not found.');
+    }
+    if (pageIndex < 0 || pageIndex >= existing.imagePaths.length) {
+      throw const StorageException('Invalid page index.');
+    }
+    if (existing.imagePaths.length <= 1) {
+      throw const StorageException('Cannot delete the only page in a document.');
+    }
+
+    final List<String> currentImages = List<String>.from(existing.imagePaths);
+    final String removedPath = currentImages.removeAt(pageIndex);
+    final File removedFile = File(removedPath);
+    if (await removedFile.exists()) {
+      await removedFile.delete();
+    }
+
+    final String? pdfPath = existing.pdfPath;
+    if (pdfPath != null && pdfPath.isNotEmpty) {
+      await pdfService.createDocumentPdfFromImages(
+        imagePaths: currentImages,
+        outputPath: pdfPath,
+      );
+    }
+
+    final ScannedDocument updated = existing.copyWith(
+      pageCount: currentImages.length,
+      imagePaths: currentImages,
+    );
+    await _upsertDocument(updated);
+    return updated;
   }
 
   Future<void> deleteDocument(String id) async {

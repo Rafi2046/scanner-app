@@ -29,6 +29,7 @@ class HomeTabView extends StatelessWidget {
     required this.onProtect,
     required this.onAllTools,
     required this.onDelete,
+    this.onTapDocument,
     required this.onRefresh,
   });
 
@@ -47,6 +48,7 @@ class HomeTabView extends StatelessWidget {
   final VoidCallback onProtect;
   final VoidCallback onAllTools;
   final ValueChanged<String> onDelete;
+  final ValueChanged<ScannedDocument>? onTapDocument;
   final Future<void> Function() onRefresh;
 
   @override
@@ -93,6 +95,7 @@ class HomeTabView extends StatelessWidget {
                   searchQuery: searchQuery,
                   onScanDocument: onScanDocument,
                   onDelete: onDelete,
+                  onTapDocument: onTapDocument,
                   onRefresh: onRefresh,
                 ),
                 const SizedBox(height: AppConstants.bottomNavClearance),
@@ -111,6 +114,7 @@ class _LibraryBody extends StatelessWidget {
     required this.searchQuery,
     required this.onScanDocument,
     required this.onDelete,
+    this.onTapDocument,
     required this.onRefresh,
   });
 
@@ -118,6 +122,7 @@ class _LibraryBody extends StatelessWidget {
   final String searchQuery;
   final VoidCallback onScanDocument;
   final ValueChanged<String> onDelete;
+  final ValueChanged<ScannedDocument>? onTapDocument;
   final Future<void> Function() onRefresh;
 
   @override
@@ -129,7 +134,7 @@ class _LibraryBody extends StatelessWidget {
       ),
       error: (Object error, StackTrace _) => ErrorBanner.fromError(
         error: error,
-        onRetry: onRefresh,
+        onRetry: onRetry,
       ),
       data: (List<ScannedDocument> documents) {
         final List<ScannedDocument> filtered = searchQuery.isEmpty
@@ -156,9 +161,12 @@ class _LibraryBody extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
           documents: filtered,
+          onTap: onTapDocument,
           onDelete: onDelete,
         );
       },
     );
   }
+
+  Future<void> onRetry() => onRefresh();
 }

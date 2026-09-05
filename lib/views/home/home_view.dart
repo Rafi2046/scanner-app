@@ -5,6 +5,7 @@ import 'package:scanner_app/core/enums/custom_scan_mode.dart';
 import 'package:scanner_app/models/scanned_document.dart';
 import 'package:scanner_app/providers/library_provider.dart';
 import 'package:scanner_app/providers/pdf_tools_provider.dart';
+import 'package:scanner_app/views/document_details/document_details_view.dart';
 import 'package:scanner_app/views/document_scan/custom_scan_view.dart';
 import 'package:scanner_app/views/home/tabs/files_tab_view.dart';
 import 'package:scanner_app/views/home/tabs/home_tab_view.dart';
@@ -79,6 +80,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
               onAllTools: () => setState(() => _selectedTab = 2),
               onDelete: (String id) =>
                   ref.read(libraryNotifierProvider.notifier).deleteDocument(id),
+              onTapDocument: (ScannedDocument doc) => _push(
+                DocumentDetailsView(
+                  documentId: doc.id,
+                  initialDocument: doc,
+                ),
+              ),
               onRefresh: () =>
                   ref.read(libraryNotifierProvider.notifier).loadLibrary(),
             ),
@@ -91,6 +98,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
               onMerge: () => _push(const MergePdfView()),
               onDelete: (String id) =>
                   ref.read(libraryNotifierProvider.notifier).deleteDocument(id),
+              onTapDocument: (ScannedDocument doc) => _push(
+                DocumentDetailsView(
+                  documentId: doc.id,
+                  initialDocument: doc,
+                ),
+              ),
               onRefresh: () =>
                   ref.read(libraryNotifierProvider.notifier).loadLibrary(),
             ),

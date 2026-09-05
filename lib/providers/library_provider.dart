@@ -24,6 +24,51 @@ class LibraryNotifier extends _$LibraryNotifier {
     });
   }
 
+  Future<ScannedDocument?> renameDocument(String id, String newTitle) async {
+    ScannedDocument? result;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      result = await ref
+          .read(storageServiceProvider)
+          .renameDocument(id, newTitle);
+      return _fetch();
+    });
+    return result;
+  }
+
+  Future<ScannedDocument?> addPagesToDocument(
+    String id,
+    List<String> tempImages,
+  ) async {
+    ScannedDocument? result;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final pdfService = ref.read(pdfServiceProvider);
+      result = await ref.read(storageServiceProvider).addPagesToDocument(
+            id: id,
+            newTempImages: tempImages,
+            pdfService: pdfService,
+          );
+      return _fetch();
+    });
+    return result;
+  }
+
+  Future<ScannedDocument?> deletePage(String id, int pageIndex) async {
+    ScannedDocument? result;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final pdfService = ref.read(pdfServiceProvider);
+      result = await ref.read(storageServiceProvider).deletePageFromDocument(
+            id: id,
+            pageIndex: pageIndex,
+            pdfService: pdfService,
+          );
+      return _fetch();
+    });
+    return result;
+  }
+
   Future<List<ScannedDocument>> _fetch() {
     return ref.read(storageServiceProvider).listDocuments();
   }
