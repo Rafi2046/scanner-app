@@ -14,7 +14,8 @@ class CustomScanState {
     this.pendingPath,
     this.pendingQuad,
     this.warpedPath,
-    this.selectedFilter = ScanFilter.original,
+    this.rawWarpedPath,
+    this.selectedFilter = ScanFilter.color,
     this.idSide = IdScanSide.front,
     this.busy = false,
     this.busyMessage,
@@ -28,6 +29,7 @@ class CustomScanState {
   final String? pendingPath;
   final ScanQuad? pendingQuad;
   final String? warpedPath;
+  final String? rawWarpedPath;
   final ScanFilter selectedFilter;
   final IdScanSide idSide;
   final bool busy;
@@ -58,6 +60,7 @@ class CustomScanState {
     String? pendingPath,
     ScanQuad? pendingQuad,
     String? warpedPath,
+    String? rawWarpedPath,
     ScanFilter? selectedFilter,
     IdScanSide? idSide,
     bool? busy,
@@ -76,6 +79,7 @@ class CustomScanState {
       pendingPath: clearPending ? null : (pendingPath ?? this.pendingPath),
       pendingQuad: clearPending ? null : (pendingQuad ?? this.pendingQuad),
       warpedPath: clearWarped ? null : (warpedPath ?? this.warpedPath),
+      rawWarpedPath: clearWarped ? null : (rawWarpedPath ?? this.rawWarpedPath),
       selectedFilter: selectedFilter ?? this.selectedFilter,
       idSide: idSide ?? this.idSide,
       busy: busy ?? this.busy,

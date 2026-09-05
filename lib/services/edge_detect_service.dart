@@ -15,12 +15,22 @@ class EdgeDetectService {
 
   /// Detects a document quad. On failure returns an inset rectangle (never throws
   /// for "no document found" — only for missing/unreadable files).
-  Future<ScanQuad> detectCorners(String imagePath) async {
+  Future<ScanQuad> detectCorners(String imagePath, {ScanQuad? liveQuad}) async {
     if (imagePath.isEmpty) {
       throw const ScannerException('No image path for edge detection.');
     }
     if (!File(imagePath).existsSync()) {
       throw ScannerException('Image missing for edge detection: $imagePath');
+    }
+
+    if (liveQuad != null) {
+      try {
+        final Uint8List bytes = await File(imagePath).readAsBytes();
+        final img.Image? decoded = await Isolate.run(() => img.decodeImage(bytes));
+        if (decoded != null) {
+          return ScanQuad.fromNormalized(liveQuad, decoded.width, decoded.height);
+        }
+      } catch (_) {}
     }
 
     try {

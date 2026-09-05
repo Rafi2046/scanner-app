@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' show Offset;
 
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
@@ -85,6 +86,19 @@ class CameraCaptureService {
     }
   }
 
+  Future<void> setFocusPoint(Offset point) async {
+    final CameraController? c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    try {
+      if (c.value.focusPointSupported) {
+        await c.setFocusPoint(point);
+      }
+      if (c.value.exposurePointSupported) {
+        await c.setExposurePoint(point);
+      }
+    } catch (_) {}
+  }
+
   int get sensorOrientation =>
       _controller?.description.sensorOrientation ?? 90;
 
@@ -125,6 +139,7 @@ class CameraCaptureService {
         await c.stopImageStream();
       }
       final XFile raw = await c.takePicture();
+      await setFlash(FlashMode.off);
       return _downscaleToScanCache(raw.path);
     } on AppException {
       rethrow;

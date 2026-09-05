@@ -7,6 +7,7 @@ import 'package:scanner_app/providers/custom_scan_provider.dart';
 import 'package:scanner_app/providers/custom_scan_state.dart';
 import 'package:scanner_app/providers/service_providers.dart';
 import 'package:scanner_app/models/scan_quad.dart';
+import 'package:scanner_app/services/camera_capture_service.dart';
 import 'package:scanner_app/services/live_document_detector.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_camera_top_bar.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_camera_viewfinder.dart';
@@ -31,6 +32,7 @@ class CaptureStepView extends ConsumerStatefulWidget {
 
 class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   final LiveDocumentDetector _detector = LiveDocumentDetector();
+  late final CameraCaptureService _camera;
   ScanQuad? _detectedQuad;
   bool _ready = false;
   bool _disposed = false;
@@ -43,6 +45,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   @override
   void initState() {
     super.initState();
+    _camera = ref.read(cameraCaptureServiceProvider);
     _tabMode = ref.read(customScanNotifierProvider).mode == CustomScanMode.idCard
         ? ScanTabMode.idCards
         : ScanTabMode.scan;
@@ -52,18 +55,18 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   @override
   void dispose() {
     _disposed = true;
-    ref.read(cameraCaptureServiceProvider).stopImageStream();
+    _camera.setFlash(FlashMode.off);
+    _camera.stopImageStream();
     super.dispose();
   }
 
   Future<void> _initCamera() async {
     try {
-      final camera = ref.read(cameraCaptureServiceProvider);
-      await camera.initialize();
+      await _camera.initialize();
       if (!mounted || _disposed) return;
       setState(() => _ready = true);
-      final int orientation = camera.sensorOrientation;
-      await camera.startImageStream((CameraImage image) {
+      final int orientation = _camera.sensorOrientation;
+      await _camera.startImageStream((CameraImage image) {
         if (!_disposed && mounted) {
           _scheduleDetection(image, orientation);
         }
@@ -90,13 +93,12 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
 
   Future<void> _toggleFlash() async {
     _flashMode = _flashMode == FlashMode.off ? FlashMode.torch : FlashMode.off;
-    await ref.read(cameraCaptureServiceProvider).setFlash(_flashMode);
+    await _camera.setFlash(_flashMode);
     if (mounted) setState(() {});
   }
 
-  void _push(Widget page) {
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
-  }
+  void _push(Widget page) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
 
   void _onModeChanged(ScanTabMode mode) {
     setState(() => _tabMode = mode);
@@ -108,17 +110,18 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
       case ScanTabMode.sign: _push(const SignatureView());
       case ScanTabMode.toWord: _push(const PdfToImageView());
       case ScanTabMode.questionSet:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Question Set mode active.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Question Set active.')));
     }
   }
 
   Future<void> _capture(Future<String> Function() action) async {
     try {
-      await ref.read(cameraCaptureServiceProvider).stopImageStream();
+      final ScanQuad? live = _detectedQuad;
+      await _camera.stopImageStream();
       final String path = await action();
-      await ref.read(customScanNotifierProvider.notifier).onRawCaptured(path);
+      _flashMode = FlashMode.off;
+      await _camera.setFlash(FlashMode.off);
+      await ref.read(customScanNotifierProvider.notifier).onRawCaptured(path, liveQuad: live);
     } on ScannerCancelledException {
       // User cancelled picker
     } catch (error) {
@@ -132,8 +135,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   void _openFeaturesSheet() {
     ScanFeaturesBottomSheet.show(
       context,
-      onDocumentScan: () => _onModeChanged(ScanTabMode.scan),
-      onIdCard: () => _onModeChanged(ScanTabMode.idCards),
+      onDocumentScan: () => _onModeChanged(ScanTabMode.scan), onIdCard: () => _onModeChanged(ScanTabMode.idCards),
       onOcr: () => _push(const OcrResultView()),
       onSign: () => _push(const SignatureView()),
       onMerge: () => _push(const MergePdfView()),
@@ -147,7 +149,6 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   @override
   Widget build(BuildContext context) {
     final CustomScanState scan = ref.watch(customScanNotifierProvider);
-    final camera = ref.watch(cameraCaptureServiceProvider);
 
     if (_initError != null) {
       final String msg = _initError is AppException
@@ -156,7 +157,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
       return Center(child: Text(msg, style: const TextStyle(color: Colors.white70)));
     }
 
-    if (!_ready || !camera.isInitialized || camera.controller == null) {
+    if (!_ready || !_camera.isInitialized || _camera.controller == null) {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF00D2A0)));
     }
 
@@ -173,8 +174,8 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
           ),
           Expanded(
             child: ScanCameraViewfinder(
-              controller: camera.controller!,
-              aspectRatio: camera.previewAspectRatio,
+              controller: _camera.controller!,
+              aspectRatio: _camera.previewAspectRatio,
               isId: isId,
               isBatch: _isBatch,
               normalizedQuad: _detectedQuad,
@@ -188,9 +189,9 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
           ),
           ScanShutterBar(
             enabled: !scan.busy,
-            onShutter: () => _capture(camera.takePicture),
+            onShutter: () => _capture(_camera.takePicture),
             onAllFeatures: _openFeaturesSheet,
-            onGallery: () => _capture(camera.pickFromGallery),
+            onGallery: () => _capture(_camera.pickFromGallery),
           ),
         ],
       ),

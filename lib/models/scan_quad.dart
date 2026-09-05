@@ -30,6 +30,30 @@ class ScanQuad {
     );
   }
 
+  /// Scales normalized (0..1) quad coordinates to pixel image dimensions.
+  factory ScanQuad.fromNormalized(ScanQuad quad, int width, int height) {
+    final double w = width.toDouble();
+    final double h = height.toDouble();
+    return ScanQuad(
+      topLeft: Offset(
+        (quad.topLeft.dx * w).clamp(0.0, w),
+        (quad.topLeft.dy * h).clamp(0.0, h),
+      ),
+      topRight: Offset(
+        (quad.topRight.dx * w).clamp(0.0, w),
+        (quad.topRight.dy * h).clamp(0.0, h),
+      ),
+      bottomRight: Offset(
+        (quad.bottomRight.dx * w).clamp(0.0, w),
+        (quad.bottomRight.dy * h).clamp(0.0, h),
+      ),
+      bottomLeft: Offset(
+        (quad.bottomLeft.dx * w).clamp(0.0, w),
+        (quad.bottomLeft.dy * h).clamp(0.0, h),
+      ),
+    );
+  }
+
   List<Offset> get points =>
       <Offset>[topLeft, topRight, bottomRight, bottomLeft];
 
