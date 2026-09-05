@@ -16,6 +16,7 @@ class CustomScanState {
     this.warpedPath,
     this.rawWarpedPath,
     this.selectedFilter = ScanFilter.color,
+    this.rotationTurns = 0,
     this.idSide = IdScanSide.front,
     this.busy = false,
     this.busyMessage,
@@ -31,6 +32,7 @@ class CustomScanState {
   final String? warpedPath;
   final String? rawWarpedPath;
   final ScanFilter selectedFilter;
+  final int rotationTurns;
   final IdScanSide idSide;
   final bool busy;
   final String? busyMessage;
@@ -62,6 +64,7 @@ class CustomScanState {
     String? warpedPath,
     String? rawWarpedPath,
     ScanFilter? selectedFilter,
+    int? rotationTurns,
     IdScanSide? idSide,
     bool? busy,
     String? busyMessage,
@@ -71,6 +74,7 @@ class CustomScanState {
     bool clearWarped = false,
     bool clearError = false,
     bool clearBusyMessage = false,
+    bool clearRotation = false,
   }) {
     return CustomScanState(
       mode: mode ?? this.mode,
@@ -81,6 +85,7 @@ class CustomScanState {
       warpedPath: clearWarped ? null : (warpedPath ?? this.warpedPath),
       rawWarpedPath: clearWarped ? null : (rawWarpedPath ?? this.rawWarpedPath),
       selectedFilter: selectedFilter ?? this.selectedFilter,
+      rotationTurns: clearRotation ? 0 : (rotationTurns ?? this.rotationTurns),
       idSide: idSide ?? this.idSide,
       busy: busy ?? this.busy,
       busyMessage:

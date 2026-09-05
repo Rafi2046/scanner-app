@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/core/enums/scan_filter.dart';
 import 'package:scanner_app/core/errors/app_exception.dart';
+import 'package:scanner_app/services/edge_detect_ops.dart';
 import 'package:scanner_app/services/scan_enhance_ops.dart';
 
 /// Applies document filters and image rotation off the UI isolate.
@@ -65,24 +66,35 @@ class ScanEnhanceService {
       throw ScannerException('Rotate source missing: $imagePath');
     }
     try {
-      final Uint8List bytes = await File(imagePath).readAsBytes();
-      final Uint8List jpeg = await Isolate.run(
-        () => rotateJpegBytesIsolate(
-          (
-            bytes: bytes,
-            angle: angle,
-            quality: AppConstants.scanJpegQuality,
-          ),
-        ),
-      );
-
       final Directory cache = await getTemporaryDirectory();
       final String outPath = p.join(
         cache.path,
         'scan_rot_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
-      await File(outPath).writeAsBytes(jpeg, flush: true);
-      return outPath;
+      try {
+        return await Isolate.run(
+          () => rotateImageFastSync(
+            (
+              inputPath: imagePath,
+              outputPath: outPath,
+              angle: angle,
+            ),
+          ),
+        );
+      } catch (_) {
+        final Uint8List bytes = await File(imagePath).readAsBytes();
+        final Uint8List jpeg = await Isolate.run(
+          () => rotateJpegBytesIsolate(
+            (
+              bytes: bytes,
+              angle: angle,
+              quality: AppConstants.scanJpegQuality,
+            ),
+          ),
+        );
+        await File(outPath).writeAsBytes(jpeg, flush: true);
+        return outPath;
+      }
     } on AppException {
       rethrow;
     } catch (error) {

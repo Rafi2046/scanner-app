@@ -5,6 +5,7 @@ import 'package:scanner_app/core/enums/scan_filter.dart';
 import 'package:scanner_app/providers/custom_scan_provider.dart';
 import 'package:scanner_app/providers/custom_scan_state.dart';
 import 'package:scanner_app/providers/ocr_provider.dart';
+import 'package:scanner_app/providers/service_providers.dart';
 import 'package:scanner_app/views/document_scan/widgets/document_scan_beam.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_enhance_bottom_bar.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_filter_visual_carousel.dart';
@@ -69,13 +70,22 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     });
   }
 
-  void _onExtractText(String path) {
-    ref.read(ocrNotifierProvider.notifier).extractTextFromImage(path);
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const OcrResultView(),
-      ),
-    );
+  Future<void> _onExtractText(String path, int rotationTurns) async {
+    String finalPath = path;
+    if (rotationTurns != 0) {
+      finalPath = await ref.read(scanEnhanceServiceProvider).rotateImage(
+            imagePath: path,
+            angle: (rotationTurns * 90) % 360,
+          );
+    }
+    ref.read(ocrNotifierProvider.notifier).extractTextFromImage(finalPath);
+    if (mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const OcrResultView(),
+        ),
+      );
+    }
   }
 
   void _onSign() {
@@ -170,11 +180,14 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                     child: Center(
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(AppConstants.radiusSm),
-                        child: DocumentScanBeam(
-                          trigger: _scanTrigger,
-                          imagePath: path,
-                          previousImagePath: _previousPath ?? scan.rawWarpedPath,
-                          duration: const Duration(milliseconds: 1350),
+                        child: RotatedBox(
+                          quarterTurns: scan.rotationTurns,
+                          child: DocumentScanBeam(
+                            trigger: _scanTrigger,
+                            imagePath: path,
+                            previousImagePath: _previousPath ?? scan.rawWarpedPath,
+                            duration: const Duration(milliseconds: 1350),
+                          ),
                         ),
                       ),
                     ),
@@ -277,7 +290,7 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                 ref.read(customScanNotifierProvider.notifier).goToCrop();
               },
               onExtractText: () {
-                _onExtractText(path);
+                _onExtractText(path, scan.rotationTurns);
               },
               onSign: _onSign,
               onConfirm: () {

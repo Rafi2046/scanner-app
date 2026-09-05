@@ -1,5 +1,4 @@
-import 'dart:ui' show Offset;
-
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -126,31 +125,18 @@ class CustomScanNotifier extends _$CustomScanNotifier {
   }
 
   void goToCrop() {
-    state = state.copyWith(step: CustomScanStep.crop, clearWarped: true, clearError: true);
+    state = state.copyWith(
+      step: CustomScanStep.crop,
+      clearWarped: true,
+      clearRotation: true,
+      clearError: true,
+    );
   }
 
-  Future<void> rotateLeft() async {
-    final String? raw = state.rawWarpedPath;
-    if (raw == null) return;
-    try {
-      final String rotatedRaw = await ref.read(scanEnhanceServiceProvider).rotateImage(
-            imagePath: raw,
-            angle: -90,
-          );
-      final String rotatedFiltered = await ref.read(scanEnhanceServiceProvider).applyFilter(
-            imagePath: rotatedRaw,
-            filter: state.selectedFilter,
-          );
-      _filterCache.clear();
-      _filterCache[ScanFilter.original] = rotatedRaw;
-      _filterCache[state.selectedFilter] = rotatedFiltered;
-      state = state.copyWith(
-        rawWarpedPath: rotatedRaw,
-        warpedPath: rotatedFiltered,
-      );
-    } catch (error) {
-      state = state.copyWith(error: error);
-    }
+  void rotateLeft() {
+    final int nextTurns = (state.rotationTurns + 3) % 4;
+    state = state.copyWith(rotationTurns: nextTurns);
+    HapticFeedback.lightImpact();
   }
 
   void goToCapture() {
@@ -158,6 +144,7 @@ class CustomScanNotifier extends _$CustomScanNotifier {
       step: CustomScanStep.capture,
       clearPending: true,
       clearWarped: true,
+      clearRotation: true,
       clearError: true,
     );
   }
@@ -203,6 +190,7 @@ class CustomScanNotifier extends _$CustomScanNotifier {
         rawWarpedPath: rawWarped,
         warpedPath: enhanced,
         selectedFilter: ScanFilter.color,
+        clearRotation: true,
         busy: false,
         clearBusyMessage: true,
       );
@@ -215,28 +203,44 @@ class CustomScanNotifier extends _$CustomScanNotifier {
     final String? imagePath = state.warpedPath;
     if (imagePath == null) return;
 
-    final List<ScanPageDraft> next = List<ScanPageDraft>.from(state.pages);
-    if (state.mode == CustomScanMode.idCard) {
-      next.removeWhere((ScanPageDraft p) => p.idSide == state.idSide);
-      next.add(ScanPageDraft(imagePath: imagePath, filter: state.selectedFilter, idSide: state.idSide));
-    } else {
-      next.add(ScanPageDraft(imagePath: imagePath, filter: state.selectedFilter));
-    }
+    state = state.copyWith(busy: true, clearError: true);
 
-    IdScanSide nextSide = state.idSide;
-    if (state.mode == CustomScanMode.idCard && state.idSide == IdScanSide.front) {
-      nextSide = IdScanSide.back;
-    }
+    String finalPath = imagePath;
+    try {
+      if (state.rotationTurns != 0) {
+        final int angle = (state.rotationTurns * 90) % 360;
+        finalPath = await ref.read(scanEnhanceServiceProvider).rotateImage(
+              imagePath: imagePath,
+              angle: angle,
+            );
+      }
 
-    state = state.copyWith(
-      step: CustomScanStep.pages,
-      pages: next,
-      idSide: nextSide,
-      busy: false,
-      clearBusyMessage: true,
-      clearPending: true,
-      clearWarped: true,
-    );
+      final List<ScanPageDraft> next = List<ScanPageDraft>.from(state.pages);
+      if (state.mode == CustomScanMode.idCard) {
+        next.removeWhere((ScanPageDraft p) => p.idSide == state.idSide);
+        next.add(ScanPageDraft(imagePath: finalPath, filter: state.selectedFilter, idSide: state.idSide));
+      } else {
+        next.add(ScanPageDraft(imagePath: finalPath, filter: state.selectedFilter));
+      }
+
+      IdScanSide nextSide = state.idSide;
+      if (state.mode == CustomScanMode.idCard && state.idSide == IdScanSide.front) {
+        nextSide = IdScanSide.back;
+      }
+
+      state = state.copyWith(
+        step: CustomScanStep.pages,
+        pages: next,
+        idSide: nextSide,
+        busy: false,
+        clearBusyMessage: true,
+        clearPending: true,
+        clearWarped: true,
+        clearRotation: true,
+      );
+    } catch (error) {
+      state = state.copyWith(busy: false, clearBusyMessage: true, error: error);
+    }
   }
 
   void removePage(int index) {

@@ -454,3 +454,32 @@ List<Offset> orderQuadPoints(List<Offset> pts) {
   final Offset bl = byDiff.last;
   return <Offset>[tl, tr, br, bl];
 }
+
+/// Fast native OpenCV image rotation — run inside [Isolate.run].
+String rotateImageFastSync(({String inputPath, String outputPath, int angle}) args) {
+  final cv.Mat src = cv.imread(args.inputPath);
+  if (src.isEmpty) {
+    throw StateError('Could not read image for rotation: ${args.inputPath}');
+  }
+  cv.Mat? rotated;
+  try {
+    final int normAngle = (args.angle % 360 + 360) % 360;
+    if (normAngle == 90) {
+      rotated = cv.rotate(src, cv.ROTATE_90_CLOCKWISE);
+    } else if (normAngle == 180) {
+      rotated = cv.rotate(src, cv.ROTATE_180);
+    } else if (normAngle == 270) {
+      rotated = cv.rotate(src, cv.ROTATE_90_COUNTERCLOCKWISE);
+    } else {
+      rotated = src.clone();
+    }
+    final bool ok = cv.imwrite(args.outputPath, rotated);
+    if (!ok) {
+      throw StateError('Failed to write rotated image: ${args.outputPath}');
+    }
+    return args.outputPath;
+  } finally {
+    rotated?.dispose();
+    src.dispose();
+  }
+}
