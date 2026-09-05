@@ -14,11 +14,15 @@ import 'package:scanner_app/services/scan_enhance_ops.dart';
 class ScanEnhanceService {
   const ScanEnhanceService();
 
-  /// Returns a new JPEG path with [filter] applied (Original returns original path).
+  /// Returns a new JPEG path with [filterType] applied (Original returns original path).
+  /// Executed strictly inside an isolate to prevent UI thread blocking.
   Future<String> applyFilter({
     required String imagePath,
-    required ScanFilter filter,
+    ScanFilter? filterType,
+    ScanFilter? filter,
   }) async {
+    final ScanFilter target = filterType ?? filter ?? ScanFilter.magicEnhance;
+
     if (imagePath.isEmpty) {
       throw const ScannerException('No image path for enhance.');
     }
@@ -27,29 +31,44 @@ class ScanEnhanceService {
       throw ScannerException('Enhance source missing: $imagePath');
     }
 
-    if (filter == ScanFilter.original) {
+    // Original returns perspective-warped image directly without copying
+    if (target == ScanFilter.original) {
       return imagePath;
     }
 
     try {
-      final Uint8List bytes = await input.readAsBytes();
-      final Uint8List jpeg = await Isolate.run(
-        () => applyScanFilterIsolate(
-          (
-            bytes: bytes,
-            filterName: filter.name,
-            quality: AppConstants.scanJpegQuality,
-          ),
-        ),
-      );
-
       final Directory cache = await getTemporaryDirectory();
       final String outPath = p.join(
         cache.path,
-        'scan_fx_${filter.name}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        'scan_fx_${target.name}_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
-      await File(outPath).writeAsBytes(jpeg, flush: true);
-      return outPath;
+
+      try {
+        // High performance native OpenCV processing inside Isolate.run
+        return await Isolate.run(
+          () => applyScanFilterFastSync(
+            (
+              inputPath: imagePath,
+              outputPath: outPath,
+              filterName: target.name,
+            ),
+          ),
+        );
+      } catch (_) {
+        // Safe fallback: Pure Dart image package inside Isolate.run
+        final Uint8List bytes = await input.readAsBytes();
+        final Uint8List jpeg = await Isolate.run(
+          () => applyScanFilterIsolate(
+            (
+              bytes: bytes,
+              filterName: target.name,
+              quality: AppConstants.scanJpegQuality,
+            ),
+          ),
+        );
+        await File(outPath).writeAsBytes(jpeg, flush: true);
+        return outPath;
+      }
     } on AppException {
       rethrow;
     } catch (error) {

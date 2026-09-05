@@ -483,3 +483,144 @@ String rotateImageFastSync(({String inputPath, String outputPath, int angle}) ar
     src.dispose();
   }
 }
+
+/// Extracts a multi-scale paper illumination sheet from [src] to eliminate shadows.
+cv.Mat _extractBackgroundIllumination(cv.Mat src) {
+  final int origW = src.width;
+  final int origH = src.height;
+
+  // 1. Downscale to 360px for fast, robust morphological shadow & lighting extraction
+  const int targetW = 360;
+  final int targetH = ((origH * targetW) / origW).round().clamp(1, 10000);
+  final cv.Mat small = cv.resize(src, (targetW, targetH));
+
+  // 2. Morphological CLOSE wipes text away, isolating the paper illumination and shadows
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (13, 13));
+  final cv.Mat closed = cv.morphologyEx(small, cv.MORPH_CLOSE, kernel);
+
+  // 3. Gaussian blur to create smooth illumination transitions
+  final cv.Mat blurred = cv.gaussianBlur(closed, (31, 31), 0);
+
+  // 4. Upscale back to original full resolution
+  final cv.Mat fullBg = cv.resize(blurred, (origW, origH));
+
+  kernel.dispose();
+  closed.dispose();
+  blurred.dispose();
+  small.dispose();
+
+  return fullBg;
+}
+
+/// Fast native OpenCV document filter processing — executed inside [Isolate.run].
+String applyScanFilterFastSync(({
+  String inputPath,
+  String outputPath,
+  String filterName,
+}) args) {
+  final cv.Mat src = cv.imread(args.inputPath);
+  if (src.isEmpty) {
+    throw StateError('Could not read image for filter: ${args.inputPath}');
+  }
+
+  cv.Mat? result;
+  cv.Mat? bg;
+  cv.Mat? divided;
+  cv.Mat? temp1;
+  cv.Mat? temp2;
+
+  try {
+    switch (args.filterName) {
+      case 'original':
+        result = src.clone();
+        break;
+
+      case 'magicEnhance':
+      case 'color':
+        // FLATBED SCANNER MACHINE LOOK:
+        // 1. Optical background division normalizes paper to pure uniform white and eliminates all shadows
+        bg = _extractBackgroundIllumination(src);
+        divided = cv.divide(src, bg, scale: 255);
+
+        // 2. Heavy contrast & text deep-inking boost
+        temp1 = cv.convertScaleAbs(divided, alpha: 1.25, beta: 6);
+
+        // 3. Unsharp mask sharpening to make printed text razor-sharp like a 300 DPI flatbed scan
+        temp2 = cv.gaussianBlur(temp1, (3, 3), 0);
+        result = cv.addWeighted(temp1, 1.35, temp2, -0.35, 0);
+        break;
+
+      case 'lighten':
+        // LIGHTEN: Noticeably brightens paper, clears shadows, gives soft studio light box look
+        bg = _extractBackgroundIllumination(src);
+        divided = cv.divide(src, bg, scale: 255);
+        result = cv.convertScaleAbs(divided, alpha: 1.08, beta: 16);
+        break;
+
+      case 'bw':
+        // PURE B&W (Photocopier / Xerox flatbed style):
+        // 1. Convert to grayscale
+        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
+        // 2. Optical background division on grayscale to completely erase shadows
+        bg = _extractBackgroundIllumination(temp1);
+        divided = cv.divide(temp1, bg, scale: 255);
+        // 3. Adaptive Gaussian thresholding on clean shadow-free paper
+        temp2 = cv.gaussianBlur(divided, (3, 3), 0);
+        result = cv.adaptiveThreshold(
+          temp2,
+          255,
+          cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+          cv.THRESH_BINARY,
+          21,
+          10.0,
+        );
+        break;
+
+      case 'grayscale':
+        // GRAYSCALE FLATBED SCAN:
+        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
+        bg = _extractBackgroundIllumination(temp1);
+        divided = cv.divide(temp1, bg, scale: 255);
+        // Contrast bump for deep black text on crisp gray/white paper
+        result = cv.convertScaleAbs(divided, alpha: 1.28, beta: -4);
+        break;
+
+      case 'noShadow':
+        // NO SHADOW: Soft background leveling preserving delicate pencil & stamps
+        bg = _extractBackgroundIllumination(src);
+        divided = cv.divide(src, bg, scale: 255);
+        result = cv.convertScaleAbs(divided, alpha: 1.12, beta: 4);
+        break;
+
+      case 'invert':
+        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
+        bg = _extractBackgroundIllumination(temp1);
+        divided = cv.divide(temp1, bg, scale: 255);
+        result = cv.adaptiveThreshold(
+          divided,
+          255,
+          cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+          cv.THRESH_BINARY_INV,
+          21,
+          10.0,
+        );
+        break;
+
+      default:
+        result = src.clone();
+    }
+
+    final bool ok = cv.imwrite(args.outputPath, result);
+    if (!ok) {
+      throw StateError('Failed to write enhanced image: ${args.outputPath}');
+    }
+    return args.outputPath;
+  } finally {
+    temp1?.dispose();
+    temp2?.dispose();
+    divided?.dispose();
+    bg?.dispose();
+    result?.dispose();
+    src.dispose();
+  }
+}

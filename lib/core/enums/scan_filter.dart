@@ -1,21 +1,22 @@
-/// Filters applied after crop, matching CamScanner's palette.
+/// Filters applied after crop, matching CamScanner's signature palette.
 enum ScanFilter {
   original,
-  color,
-  noShadow,
-  bw,
+  magicEnhance,
   grayscale,
+  bw,
+  noShadow,
   lighten,
-  invert,
-}
+  invert;
 
-extension ScanFilterX on ScanFilter {
+  /// Alias for backward compatibility with existing code
+  static const ScanFilter color = magicEnhance;
+
   String get label => switch (this) {
         ScanFilter.original => 'Original',
-        ScanFilter.color => 'Magic Color',
-        ScanFilter.noShadow => 'No Shadow',
-        ScanFilter.bw => 'B&W',
+        ScanFilter.magicEnhance => 'Magic Enhance',
         ScanFilter.grayscale => 'Grayscale',
+        ScanFilter.bw => 'Pure B&W',
+        ScanFilter.noShadow => 'No Shadow',
         ScanFilter.lighten => 'Lighten',
         ScanFilter.invert => 'Invert',
       };

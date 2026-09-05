@@ -34,6 +34,7 @@ Uint8List applyScanFilterIsolate(({
   );
 }
 
+
 /// Isolate entry: rotates image bytes by [angle] degrees (e.g. -90, 90).
 Uint8List rotateJpegBytesIsolate(({
   Uint8List bytes,
