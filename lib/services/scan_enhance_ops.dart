@@ -22,8 +22,11 @@ Uint8List applyScanFilterIsolate(({
   final img.Image out = switch (filter) {
     ScanFilter.original => decoded,
     ScanFilter.color => _magicColorFilter(decoded),
+    ScanFilter.noShadow => _noShadowFilter(decoded),
     ScanFilter.bw => _bwScanFilter(decoded),
-    ScanFilter.enhance => _enhanceFilter(decoded),
+    ScanFilter.grayscale => _grayscaleFilter(decoded),
+    ScanFilter.lighten => _lightenFilter(decoded),
+    ScanFilter.invert => _invertFilter(decoded),
   };
 
   return Uint8List.fromList(
@@ -31,79 +34,40 @@ Uint8List applyScanFilterIsolate(({
   );
 }
 
+/// Isolate entry: rotates image bytes by [angle] degrees (e.g. -90, 90).
+Uint8List rotateJpegBytesIsolate(({
+  Uint8List bytes,
+  int angle,
+  int quality,
+}) args) {
+  final img.Image? decoded = img.decodeImage(args.bytes);
+  if (decoded == null) {
+    throw StateError('Could not decode image for rotate.');
+  }
+  final img.Image rotated = img.copyRotate(decoded, angle: args.angle);
+  return Uint8List.fromList(
+    img.encodeJpg(rotated, quality: args.quality),
+  );
+}
+
 /// CamScanner "Magic Color": Local background equalization + shadow removal + white-paper boost.
 img.Image _magicColorFilter(img.Image src) {
-  final int w = src.width;
-  final int h = src.height;
+  return _processDocument(src, blackCut: 0.44, whiteCut: 0.88, isColor: true);
+}
 
-  final Uint8List luma = _computeLuminance(src, w, h);
-  const int gridCols = 24;
-  const int gridRows = 32;
-  final Float32List bgGrid = _estimateBackgroundGrid(luma, w, h, gridCols, gridRows);
-
-  final img.Image dst = img.Image(width: w, height: h);
-
-  const double blackCut = 0.44;
-  const double whiteCut = 0.88;
-
-  for (int y = 0; y < h; y++) {
-    final double gy = (y / h) * (gridRows - 1);
-    final int gy0 = gy.floor().clamp(0, gridRows - 1);
-    final int gy1 = (gy0 + 1).clamp(0, gridRows - 1);
-    final double ty = gy - gy0;
-    final int rowOff = y * w;
-
-    for (int x = 0; x < w; x++) {
-      final double gx = (x / w) * (gridCols - 1);
-      final int gx0 = gx.floor().clamp(0, gridCols - 1);
-      final int gx1 = (gx0 + 1).clamp(0, gridCols - 1);
-      final double tx = gx - gx0;
-
-      final double b00 = bgGrid[gy0 * gridCols + gx0];
-      final double b10 = bgGrid[gy0 * gridCols + gx1];
-      final double b01 = bgGrid[gy1 * gridCols + gx0];
-      final double b11 = bgGrid[gy1 * gridCols + gx1];
-      final double bgTop = b00 + tx * (b10 - b00);
-      final double bgBot = b01 + tx * (b11 - b01);
-      final double bg = bgTop + ty * (bgBot - bgTop);
-
-      final int curLuma = luma[rowOff + x];
-      final double ratio = curLuma / (bg > 12.0 ? bg : 12.0);
-
-      double targetLuma;
-      if (ratio >= whiteCut) {
-        targetLuma = 255.0;
-      } else if (ratio <= blackCut) {
-        targetLuma = (ratio / blackCut) * 28.0;
-      } else {
-        final double t = (ratio - blackCut) / (whiteCut - blackCut);
-        final double curve = t * t * (3.0 - 2.0 * t);
-        targetLuma = 28.0 + curve * (255.0 - 28.0);
-      }
-
-      final double gain = curLuma > 0 ? (targetLuma / curLuma) : 1.0;
-      final img.Pixel p = src.getPixel(x, y);
-      final int r = (p.r * gain).round().clamp(0, 255);
-      final int g = (p.g * gain).round().clamp(0, 255);
-      final int b = (p.b * gain).round().clamp(0, 255);
-
-      dst.setPixelRgb(x, y, r, g, b);
-    }
-  }
-
-  return dst;
+/// CamScanner "No Shadow": Soft shadow flattening, preserving fine handwriting and stamps.
+img.Image _noShadowFilter(img.Image src) {
+  return _processDocument(src, blackCut: 0.36, whiteCut: 0.84, isColor: true);
 }
 
 /// Pure black & white photocopier / high-contrast flatbed scan.
 img.Image _bwScanFilter(img.Image src) {
   final int w = src.width;
   final int h = src.height;
-
   final Uint8List luma = _computeLuminance(src, w, h);
   const int gridCols = 24;
   const int gridRows = 32;
   final Float32List bgGrid = _estimateBackgroundGrid(luma, w, h, gridCols, gridRows);
-
   final img.Image dst = img.Image(width: w, height: h);
 
   const double blackCut = 0.62;
@@ -126,9 +90,7 @@ img.Image _bwScanFilter(img.Image src) {
       final double b10 = bgGrid[gy0 * gridCols + gx1];
       final double b01 = bgGrid[gy1 * gridCols + gx0];
       final double b11 = bgGrid[gy1 * gridCols + gx1];
-      final double bgTop = b00 + tx * (b10 - b00);
-      final double bgBot = b01 + tx * (b11 - b01);
-      final double bg = bgTop + ty * (bgBot - bgTop);
+      final double bg = (b00 + tx * (b10 - b00)) + ty * ((b01 + tx * (b11 - b01)) - (b00 + tx * (b10 - b00)));
 
       final int curLuma = luma[rowOff + x];
       final double ratio = curLuma / (bg > 12.0 ? bg : 12.0);
@@ -142,7 +104,6 @@ img.Image _bwScanFilter(img.Image src) {
         final double t = (ratio - blackCut) / (whiteCut - blackCut);
         val = (t * 255.0).round().clamp(0, 255);
       }
-
       dst.setPixelRgb(x, y, val, val, val);
     }
   }
@@ -150,17 +111,87 @@ img.Image _bwScanFilter(img.Image src) {
   return dst;
 }
 
-/// Enhance filter: Magic Color + 3x3 unsharp mask for extreme text crispness.
-img.Image _enhanceFilter(img.Image src) {
-  final img.Image magic = _magicColorFilter(src);
-  return img.convolution(
-    magic,
-    filter: <num>[
-      0, -0.6, 0,
-      -0.6, 3.4, -0.6,
-      0, -0.6, 0,
-    ],
-  );
+/// Clean grayscale flatbed scanner look.
+img.Image _grayscaleFilter(img.Image src) {
+  return _processDocument(src, blackCut: 0.40, whiteCut: 0.88, isColor: false);
+}
+
+/// Lightens shadows and boosts brightness while keeping original color palette.
+img.Image _lightenFilter(img.Image src) {
+  final img.Image brightened = img.adjustColor(src, brightness: 1.20, contrast: 1.10);
+  return img.adjustColor(brightened, gamma: 0.90);
+}
+
+/// Inverted scan: white text on dark background.
+img.Image _invertFilter(img.Image src) {
+  return img.invert(_bwScanFilter(src));
+}
+
+/// Core adaptive background leveling engine.
+img.Image _processDocument(
+  img.Image src, {
+  required double blackCut,
+  required double whiteCut,
+  required bool isColor,
+}) {
+  final int w = src.width;
+  final int h = src.height;
+
+  final Uint8List luma = _computeLuminance(src, w, h);
+  const int gridCols = 24;
+  const int gridRows = 32;
+  final Float32List bgGrid = _estimateBackgroundGrid(luma, w, h, gridCols, gridRows);
+
+  final img.Image dst = img.Image(width: w, height: h);
+
+  for (int y = 0; y < h; y++) {
+    final double gy = (y / h) * (gridRows - 1);
+    final int gy0 = gy.floor().clamp(0, gridRows - 1);
+    final int gy1 = (gy0 + 1).clamp(0, gridRows - 1);
+    final double ty = gy - gy0;
+    final int rowOff = y * w;
+
+    for (int x = 0; x < w; x++) {
+      final double gx = (x / w) * (gridCols - 1);
+      final int gx0 = gx.floor().clamp(0, gridCols - 1);
+      final int gx1 = (gx0 + 1).clamp(0, gridCols - 1);
+      final double tx = gx - gx0;
+
+      final double b00 = bgGrid[gy0 * gridCols + gx0];
+      final double b10 = bgGrid[gy0 * gridCols + gx1];
+      final double b01 = bgGrid[gy1 * gridCols + gx0];
+      final double b11 = bgGrid[gy1 * gridCols + gx1];
+      final double bg = (b00 + tx * (b10 - b00)) + ty * ((b01 + tx * (b11 - b01)) - (b00 + tx * (b10 - b00)));
+
+      final int curLuma = luma[rowOff + x];
+      final double ratio = curLuma / (bg > 12.0 ? bg : 12.0);
+
+      double targetLuma;
+      if (ratio >= whiteCut) {
+        targetLuma = 255.0;
+      } else if (ratio <= blackCut) {
+        targetLuma = (ratio / blackCut) * 26.0;
+      } else {
+        final double t = (ratio - blackCut) / (whiteCut - blackCut);
+        final double curve = t * t * (3.0 - 2.0 * t);
+        targetLuma = 26.0 + curve * (255.0 - 26.0);
+      }
+
+      if (isColor) {
+        final double gain = curLuma > 0 ? (targetLuma / curLuma) : 1.0;
+        final img.Pixel p = src.getPixel(x, y);
+        final int r = (p.r * gain).round().clamp(0, 255);
+        final int g = (p.g * gain).round().clamp(0, 255);
+        final int b = (p.b * gain).round().clamp(0, 255);
+        dst.setPixelRgb(x, y, r, g, b);
+      } else {
+        final int v = targetLuma.round().clamp(0, 255);
+        dst.setPixelRgb(x, y, v, v, v);
+      }
+    }
+  }
+
+  return dst;
 }
 
 Uint8List _computeLuminance(img.Image src, int w, int h) {

@@ -90,15 +90,17 @@ class _CustomScanViewState extends ConsumerState<CustomScanView> {
                 backgroundColor: Colors.black,
                 body: SafeArea(child: CaptureStepView()),
               )
-            : DarkScanScaffold(
-                title: title,
-                body: switch (scan.step) {
-                  CustomScanStep.capture => const SizedBox.shrink(),
-                  CustomScanStep.crop => const CropStepView(),
-                  CustomScanStep.enhance => const EnhanceStepView(),
-                  CustomScanStep.pages => const PagesStepView(),
-                },
-              ),
+            : scan.step == CustomScanStep.enhance
+                ? const EnhanceStepView()
+                : DarkScanScaffold(
+                    title: title,
+                    body: switch (scan.step) {
+                      CustomScanStep.capture => const SizedBox.shrink(),
+                      CustomScanStep.crop => const CropStepView(),
+                      CustomScanStep.enhance => const SizedBox.shrink(),
+                      CustomScanStep.pages => const PagesStepView(),
+                    },
+                  ),
       ),
     );
   }

@@ -1,0 +1,189 @@
+import 'package:flutter/material.dart';
+
+/// Bottom action bar for Enhance view with custom signature styling.
+class ScanEnhanceBottomBar extends StatelessWidget {
+  const ScanEnhanceBottomBar({
+    super.key,
+    required this.onRetake,
+    required this.onRotateLeft,
+    required this.onCrop,
+    required this.onExtractText,
+    required this.onSign,
+    required this.onConfirm,
+    this.busy = false,
+  });
+
+  final VoidCallback onRetake;
+  final VoidCallback onRotateLeft;
+  final VoidCallback onCrop;
+  final VoidCallback onExtractText;
+  final VoidCallback onSign;
+  final VoidCallback onConfirm;
+  final bool busy;
+
+  static const Color accent = Color(0xFF00D2A0);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF14171C),
+        border: Border(
+          top: BorderSide(color: Color(0xFF22262F), width: 1),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            _ToolbarAction(
+              icon: Icons.replay_rounded,
+              label: 'Retake',
+              onTap: busy ? null : onRetake,
+            ),
+            _ToolbarAction(
+              icon: Icons.rotate_left_rounded,
+              label: 'Rotate',
+              onTap: busy ? null : onRotateLeft,
+            ),
+            _ToolbarAction(
+              icon: Icons.crop_rounded,
+              label: 'Crop',
+              onTap: busy ? null : onCrop,
+            ),
+            _ToolbarAction(
+              icon: Icons.document_scanner_outlined,
+              label: 'OCR Text',
+              badge: 'AI',
+              badgeColor: accent,
+              onTap: busy ? null : onExtractText,
+            ),
+            _ToolbarAction(
+              icon: Icons.draw_outlined,
+              label: 'Sign',
+              onTap: busy ? null : onSign,
+            ),
+            // Glowing Confirm Checkmark Button
+            GestureDetector(
+              onTap: busy ? null : onConfirm,
+              behavior: HitTestBehavior.opaque,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 52,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: <Color>[
+                      Color(0xFF00E6B0),
+                      Color(0xFF00B388),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: busy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.check_rounded,
+                          color: Color(0xFF0F141A),
+                          size: 26,
+                        ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolbarAction extends StatelessWidget {
+  const _ToolbarAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.badge,
+    this.badgeColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final String? badge;
+  final Color? badgeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool enabled = onTap != null;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Stack(
+              clipBehavior: Clip.none,
+              children: <Widget>[
+                Icon(
+                  icon,
+                  color: enabled ? Colors.white : Colors.white38,
+                  size: 22,
+                ),
+                if (badge != null)
+                  Positioned(
+                    right: -9,
+                    top: -5,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: badgeColor ?? const Color(0xFF3B82F6),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        badge!,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: enabled ? Colors.white70 : Colors.white24,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

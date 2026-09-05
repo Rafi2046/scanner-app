@@ -58,6 +58,34 @@ class CustomScanNotifier extends _$CustomScanNotifier {
     state = state.copyWith(pendingQuad: quad, clearError: true);
   }
 
+  void goToCrop() {
+    state = state.copyWith(step: CustomScanStep.crop, clearWarped: true, clearError: true);
+  }
+
+  Future<void> rotateLeft() async {
+    final String? raw = state.rawWarpedPath;
+    if (raw == null) return;
+    state = state.copyWith(busy: true, busyMessage: 'Rotating…', clearError: true);
+    try {
+      final String rotatedRaw = await ref.read(scanEnhanceServiceProvider).rotateImage(
+            imagePath: raw,
+            angle: -90,
+          );
+      final String rotatedFiltered = await ref.read(scanEnhanceServiceProvider).applyFilter(
+            imagePath: rotatedRaw,
+            filter: state.selectedFilter,
+          );
+      state = state.copyWith(
+        rawWarpedPath: rotatedRaw,
+        warpedPath: rotatedFiltered,
+        busy: false,
+        clearBusyMessage: true,
+      );
+    } catch (error) {
+      state = state.copyWith(busy: false, clearBusyMessage: true, error: error);
+    }
+  }
+
   void goToCapture() {
     state = state.copyWith(
       step: CustomScanStep.capture,

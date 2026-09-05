@@ -180,6 +180,9 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
               isBatch: _isBatch,
               normalizedQuad: _detectedQuad,
               onBatchToggle: (bool val) => setState(() => _isBatch = val),
+              onFocusTap: (Offset pos, Size size) {
+                _camera.triggerFocus(screenPoint: pos, viewSize: size);
+              },
             ),
           ),
           const SizedBox(height: 6),

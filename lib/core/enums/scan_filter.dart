@@ -1,16 +1,22 @@
-/// Filter applied after crop, before a page is committed.
+/// Filters applied after crop, matching CamScanner's palette.
 enum ScanFilter {
   original,
   color,
+  noShadow,
   bw,
-  enhance,
+  grayscale,
+  lighten,
+  invert,
 }
 
 extension ScanFilterX on ScanFilter {
   String get label => switch (this) {
         ScanFilter.original => 'Original',
-        ScanFilter.color => 'Color',
+        ScanFilter.color => 'Magic Color',
+        ScanFilter.noShadow => 'No Shadow',
         ScanFilter.bw => 'B&W',
-        ScanFilter.enhance => 'Enhance',
+        ScanFilter.grayscale => 'Grayscale',
+        ScanFilter.lighten => 'Lighten',
+        ScanFilter.invert => 'Invert',
       };
 }

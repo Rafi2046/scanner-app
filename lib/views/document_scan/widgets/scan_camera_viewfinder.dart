@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:scanner_app/models/scan_quad.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_batch_pill.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_document_overlay.dart';
@@ -15,6 +16,7 @@ class ScanCameraViewfinder extends StatefulWidget {
     required this.isBatch,
     required this.normalizedQuad,
     required this.onBatchToggle,
+    this.onFocusTap,
   });
 
   final CameraController controller;
@@ -23,6 +25,7 @@ class ScanCameraViewfinder extends StatefulWidget {
   final bool isBatch;
   final ScanQuad? normalizedQuad;
   final ValueChanged<bool> onBatchToggle;
+  final void Function(Offset localPos, Size size)? onFocusTap;
 
   @override
   State<ScanCameraViewfinder> createState() => _ScanCameraViewfinderState();
@@ -39,7 +42,7 @@ class _ScanCameraViewfinderState extends State<ScanCameraViewfinder>
     super.initState();
     _anim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 280),
     );
   }
 
@@ -54,36 +57,16 @@ class _ScanCameraViewfinderState extends State<ScanCameraViewfinder>
     final Offset pos = details.localPosition;
     setState(() => _focusPos = pos);
     _anim.forward(from: 0.0);
+    HapticFeedback.selectionClick();
 
     _fadeTimer?.cancel();
-    _fadeTimer = Timer(const Duration(milliseconds: 1200), () {
+    _fadeTimer = Timer(const Duration(milliseconds: 1400), () {
       if (mounted) setState(() => _focusPos = null);
     });
 
-    // Map tap to camera 0..1 normalized coordinates
-    final double viewAspect = size.width / size.height;
-    double nx;
-    double ny;
-    if (viewAspect > widget.aspectRatio) {
-      final double pH = size.width / widget.aspectRatio;
-      final double offY = (pH - size.height) / 2.0;
-      nx = (pos.dx / size.width).clamp(0.0, 1.0);
-      ny = ((pos.dy + offY) / pH).clamp(0.0, 1.0);
-    } else {
-      final double pW = size.height * widget.aspectRatio;
-      final double offX = (pW - size.width) / 2.0;
-      nx = ((pos.dx + offX) / pW).clamp(0.0, 1.0);
-      ny = (pos.dy / size.height).clamp(0.0, 1.0);
+    if (widget.onFocusTap != null) {
+      widget.onFocusTap!(pos, size);
     }
-
-    try {
-      if (widget.controller.value.focusPointSupported) {
-        widget.controller.setFocusPoint(Offset(nx, ny));
-      }
-      if (widget.controller.value.exposurePointSupported) {
-        widget.controller.setExposurePoint(Offset(nx, ny));
-      }
-    } catch (_) {}
   }
 
   @override
@@ -151,23 +134,39 @@ class _FocusRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color mint = Color(0xFF00D2A0);
-    return Container(
-      width: 60,
-      height: 60,
-      decoration: BoxDecoration(
-        border: Border.all(color: mint, width: 1.8),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Center(
-        child: Container(
-          width: 6,
-          height: 6,
-          decoration: const BoxDecoration(
-            color: mint,
-            shape: BoxShape.circle,
+    const Color accent = Color(0xFF00D2A0);
+    return SizedBox(
+      width: 64,
+      height: 64,
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          // Outer camera target ring
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: accent.withValues(alpha: 0.8), width: 1.6),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.4),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
           ),
-        ),
+          // Inner focus crosshair dot
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: accent,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -9,11 +9,11 @@ import 'package:scanner_app/core/enums/scan_filter.dart';
 import 'package:scanner_app/core/errors/app_exception.dart';
 import 'package:scanner_app/services/scan_enhance_ops.dart';
 
-/// Applies document filters off the UI isolate.
+/// Applies document filters and image rotation off the UI isolate.
 class ScanEnhanceService {
   const ScanEnhanceService();
 
-  /// Returns a new JPEG path with [filter] applied (Original may copy).
+  /// Returns a new JPEG path with [filter] applied (Original returns original path).
   Future<String> applyFilter({
     required String imagePath,
     required ScanFilter filter,
@@ -53,6 +53,40 @@ class ScanEnhanceService {
       rethrow;
     } catch (error) {
       throw ScannerException('Failed to apply filter.', cause: error);
+    }
+  }
+
+  /// Rotates [imagePath] by [angle] degrees (e.g. -90 for left rotate).
+  Future<String> rotateImage({
+    required String imagePath,
+    required int angle,
+  }) async {
+    if (imagePath.isEmpty || !File(imagePath).existsSync()) {
+      throw ScannerException('Rotate source missing: $imagePath');
+    }
+    try {
+      final Uint8List bytes = await File(imagePath).readAsBytes();
+      final Uint8List jpeg = await Isolate.run(
+        () => rotateJpegBytesIsolate(
+          (
+            bytes: bytes,
+            angle: angle,
+            quality: AppConstants.scanJpegQuality,
+          ),
+        ),
+      );
+
+      final Directory cache = await getTemporaryDirectory();
+      final String outPath = p.join(
+        cache.path,
+        'scan_rot_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      await File(outPath).writeAsBytes(jpeg, flush: true);
+      return outPath;
+    } on AppException {
+      rethrow;
+    } catch (error) {
+      throw ScannerException('Failed to rotate image.', cause: error);
     }
   }
 }

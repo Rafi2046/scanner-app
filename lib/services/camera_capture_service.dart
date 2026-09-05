@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:ui' show Offset;
+import 'dart:ui' show Offset, Size;
 
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
@@ -67,6 +67,9 @@ class CameraCaptureService {
 
     try {
       await next.initialize();
+      try {
+        await next.setFocusMode(FocusMode.auto);
+      } catch (_) {}
       _controller = next;
     } catch (error) {
       await next.dispose();
@@ -86,17 +89,58 @@ class CameraCaptureService {
     }
   }
 
-  Future<void> setFocusPoint(Offset point) async {
+  /// Triggers hardware autofocus and auto-exposure at the touched screen location.
+  /// Translates screen coordinates to camera sensor space based on [sensorOrientation].
+  Future<void> triggerFocus({
+    required Offset screenPoint,
+    required Size viewSize,
+  }) async {
     final CameraController? c = _controller;
     if (c == null || !c.value.isInitialized) return;
+
+    final double normX = (screenPoint.dx / viewSize.width).clamp(0.0, 1.0);
+    final double normY = (screenPoint.dy / viewSize.height).clamp(0.0, 1.0);
+
+    // Map portrait view coordinates to landscape sensor coordinates
+    final int orientation = sensorOrientation;
+    Offset sensorPoint;
+    switch (orientation) {
+      case 90:
+        sensorPoint = Offset(normY, 1.0 - normX);
+      case 270:
+        sensorPoint = Offset(1.0 - normY, normX);
+      case 180:
+        sensorPoint = Offset(1.0 - normX, 1.0 - normY);
+      case 0:
+      default:
+        sensorPoint = Offset(normX, normY);
+    }
+
+    sensorPoint = Offset(
+      sensorPoint.dx.clamp(0.0, 1.0),
+      sensorPoint.dy.clamp(0.0, 1.0),
+    );
+
     try {
       if (c.value.focusPointSupported) {
-        await c.setFocusPoint(point);
+        await c.setFocusPoint(sensorPoint);
       }
       if (c.value.exposurePointSupported) {
-        await c.setExposurePoint(point);
+        await c.setExposurePoint(sensorPoint);
       }
-    } catch (_) {}
+      // Explicitly trigger autofocus search and lock
+      await c.setFocusMode(FocusMode.auto);
+      try {
+        await c.setExposureMode(ExposureMode.auto);
+      } catch (_) {}
+    } catch (_) {
+      try {
+        if (c.value.focusPointSupported) {
+          await c.setFocusPoint(Offset(normX, normY));
+        }
+        await c.setFocusMode(FocusMode.auto);
+      } catch (_) {}
+    }
   }
 
   int get sensorOrientation =>
