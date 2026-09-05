@@ -1,14 +1,14 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/models/scan_quad.dart';
 import 'package:scanner_app/providers/custom_scan_provider.dart';
+import 'package:scanner_app/views/document_scan/widgets/scan_crop_action_bar.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_crop_overlay.dart';
-import 'package:scanner_app/views/document_scan/widgets/scan_shutter_button.dart';
-import 'package:scanner_app/views/widgets/primary_button.dart';
 
-/// Perspective crop step allowing interactive corner adjustment.
+/// Perspective crop step with loupe + premium action bar.
 class CropStepView extends ConsumerStatefulWidget {
   const CropStepView({super.key});
 
@@ -31,7 +31,9 @@ class _CropStepViewState extends ConsumerState<CropStepView> {
     if (path != null && path != _resolvedPath) {
       _resolvedPath = path;
       _resolveImageSize(path).then((Size size) {
-        if (mounted) setState(() => _imageSize = size);
+        if (mounted) {
+          setState(() => _imageSize = size);
+        }
       });
     }
   }
@@ -51,7 +53,10 @@ class _CropStepViewState extends ConsumerState<CropStepView> {
 
     if (path == null || quad == null) {
       return const Center(
-        child: Text('No image to crop', style: TextStyle(color: Colors.white70)),
+        child: Text(
+          'No image to crop',
+          style: TextStyle(color: Colors.white70),
+        ),
       );
     }
 
@@ -66,10 +71,13 @@ class _CropStepViewState extends ConsumerState<CropStepView> {
             padding: const EdgeInsets.all(AppConstants.pagePadding),
             child: _imageSize == null
                 ? const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF00D2A0)),
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF00D2A0),
+                    ),
                   )
                 : LayoutBuilder(
-                    builder: (BuildContext context, BoxConstraints constraints) {
+                    builder:
+                        (BuildContext context, BoxConstraints constraints) {
                       return ScanCropOverlay(
                         imagePath: path,
                         imageSize: _imageSize!,
@@ -85,40 +93,14 @@ class _CropStepViewState extends ConsumerState<CropStepView> {
                   ),
           ),
         ),
-        ScanBottomBar(
-          child: Row(
-            children: <Widget>[
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: scan.busy
-                      ? null
-                      : () => ref
-                          .read(customScanNotifierProvider.notifier)
-                          .goToCapture(),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white54),
-                    minimumSize: const Size.fromHeight(52),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppConstants.radiusPill),
-                    ),
-                  ),
-                  child: const Text('Retake'),
-                ),
-              ),
-              const SizedBox(width: AppConstants.spaceMd),
-              Expanded(
-                child: PrimaryButton(
-                  label: 'Confirm',
-                  onPressed: scan.busy
-                      ? null
-                      : () => ref
-                          .read(customScanNotifierProvider.notifier)
-                          .confirmCrop(),
-                ),
-              ),
-            ],
-          ),
+        ScanCropActionBar(
+          busy: scan.busy,
+          onRetake: () =>
+              ref.read(customScanNotifierProvider.notifier).goToCapture(),
+          onAutoCrop: () =>
+              ref.read(customScanNotifierProvider.notifier).redetectEdges(),
+          onConfirm: () =>
+              ref.read(customScanNotifierProvider.notifier).confirmCrop(),
         ),
       ],
     );

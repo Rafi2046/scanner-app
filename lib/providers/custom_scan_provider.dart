@@ -1,3 +1,5 @@
+import 'dart:ui' show Offset;
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -56,6 +58,59 @@ class CustomScanNotifier extends _$CustomScanNotifier {
 
   void updateQuad(ScanQuad quad) {
     state = state.copyWith(pendingQuad: quad, clearError: true);
+  }
+
+  /// Show overlay immediately when shutter/gallery starts (before downscale).
+  void beginCapture() {
+    state = state.copyWith(
+      busy: true,
+      busyMessage: 'Capturing…',
+      clearError: true,
+    );
+  }
+
+  void cancelBusy() {
+    state = state.copyWith(busy: false, clearBusyMessage: true);
+  }
+
+  /// Snap crop handles to the full image (entire frame).
+  void selectFullPage({required double width, required double height}) {
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+    state = state.copyWith(
+      pendingQuad: ScanQuad(
+        topLeft: Offset.zero,
+        topRight: Offset(width, 0),
+        bottomRight: Offset(width, height),
+        bottomLeft: Offset(0, height),
+      ),
+      clearError: true,
+    );
+  }
+
+  /// Re-run OpenCV paper detection on the captured still.
+  Future<void> redetectEdges() async {
+    final String? path = state.pendingPath;
+    if (path == null) {
+      return;
+    }
+    state = state.copyWith(
+      busy: true,
+      busyMessage: 'Finding paper…',
+      clearError: true,
+    );
+    try {
+      final ScanQuad quad =
+          await ref.read(edgeDetectServiceProvider).detectCorners(path);
+      state = state.copyWith(
+        pendingQuad: quad,
+        busy: false,
+        clearBusyMessage: true,
+      );
+    } catch (error) {
+      state = state.copyWith(busy: false, clearBusyMessage: true, error: error);
+    }
   }
 
   void goToCrop() {

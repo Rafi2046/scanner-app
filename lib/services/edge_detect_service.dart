@@ -13,24 +13,16 @@ import 'package:scanner_app/services/edge_detect_ops.dart';
 class EdgeDetectService {
   const EdgeDetectService();
 
-  /// Detects a document quad. On failure returns an inset rectangle (never throws
-  /// for "no document found" — only for missing/unreadable files).
+  /// Detects a document quad from the **still photo** (OpenCV).
+  ///
+  /// [liveQuad] is only a fallback if OpenCV finds nothing — preview quads are
+  /// often too loose and would keep background objects in the crop.
   Future<ScanQuad> detectCorners(String imagePath, {ScanQuad? liveQuad}) async {
     if (imagePath.isEmpty) {
       throw const ScannerException('No image path for edge detection.');
     }
     if (!File(imagePath).existsSync()) {
       throw ScannerException('Image missing for edge detection: $imagePath');
-    }
-
-    if (liveQuad != null) {
-      try {
-        final Uint8List bytes = await File(imagePath).readAsBytes();
-        final img.Image? decoded = await Isolate.run(() => img.decodeImage(bytes));
-        if (decoded != null) {
-          return ScanQuad.fromNormalized(liveQuad, decoded.width, decoded.height);
-        }
-      } catch (_) {}
     }
 
     try {
@@ -40,12 +32,26 @@ class EdgeDetectService {
       return ScanQuad.fromFlat(result.flat);
     } on AppException {
       rethrow;
-    } catch (error) {
+    } catch (_) {
+      if (liveQuad != null) {
+        try {
+          final Uint8List bytes = await File(imagePath).readAsBytes();
+          final img.Image? decoded =
+              await Isolate.run(() => img.decodeImage(bytes));
+          if (decoded != null) {
+            return ScanQuad.fromNormalized(
+              liveQuad,
+              decoded.width,
+              decoded.height,
+            );
+          }
+        } catch (_) {}
+      }
       final ScanQuad? fallback = await _insetFromImage(imagePath);
       if (fallback != null) {
         return fallback;
       }
-      throw ScannerException('Edge detection failed.', cause: error);
+      throw const ScannerException('Edge detection failed.');
     }
   }
 
@@ -88,7 +94,11 @@ class EdgeDetectService {
       if (decoded == null) {
         return null;
       }
-      return ScanQuad.insetRect(width: decoded.width, height: decoded.height);
+      return ScanQuad.insetRect(
+        width: decoded.width,
+        height: decoded.height,
+        insetFraction: 0.12,
+      );
     } catch (_) {
       return null;
     }

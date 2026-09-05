@@ -115,19 +115,26 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   }
 
   Future<void> _capture(Future<String> Function() action) async {
+    final notifier = ref.read(customScanNotifierProvider.notifier);
+    notifier.beginCapture();
     try {
       final ScanQuad? live = _detectedQuad;
       await _camera.stopImageStream();
       final String path = await action();
       _flashMode = FlashMode.off;
       await _camera.setFlash(FlashMode.off);
-      await ref.read(customScanNotifierProvider.notifier).onRawCaptured(path, liveQuad: live);
+      await notifier.onRawCaptured(path, liveQuad: live);
     } on ScannerCancelledException {
-      // User cancelled picker
+      notifier.cancelBusy();
     } catch (error) {
+      notifier.cancelBusy();
       if (mounted) {
-        final String msg = error is AppException ? error.message : 'Action failed: $error';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        final String msg = error is AppException
+            ? error.message
+            : 'Action failed: $error';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
       }
     }
   }
