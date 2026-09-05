@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:scanner_app/app/theme.dart';
 import 'package:scanner_app/core/constants/app_constants.dart';
-import 'package:scanner_app/providers/document_scan_provider.dart';
+import 'package:scanner_app/core/enums/custom_scan_mode.dart';
 import 'package:scanner_app/providers/pdf_tools_provider.dart';
+import 'package:scanner_app/views/document_scan/custom_scan_view.dart';
 import 'package:scanner_app/views/home/widgets/tool_circle_item.dart';
 import 'package:scanner_app/views/home/widgets/tools_section_card.dart';
-import 'package:scanner_app/views/id_card_scan/id_card_scan_view.dart';
 import 'package:scanner_app/views/ocr/ocr_result_view.dart';
 import 'package:scanner_app/views/tools/compress_view.dart';
 import 'package:scanner_app/views/tools/merge_pdf_view.dart';
@@ -17,7 +18,7 @@ import 'package:scanner_app/views/tools/watermark_view.dart';
 import 'package:scanner_app/views/tools/widgets/pdf_tools_listener.dart';
 import 'package:scanner_app/views/widgets/loading_overlay.dart';
 
-/// Standalone tools hub (same pastel language as the Tools tab).
+/// Standalone tools hub (same monochrome Lucide language as the Tools tab).
 class ToolsHubView extends ConsumerWidget {
   const ToolsHubView({super.key});
 
@@ -53,32 +54,29 @@ class ToolsHubView extends ConsumerWidget {
               title: 'Scan & Capture',
               children: <Widget>[
                 ToolCircleItem(
-                  icon: Icons.document_scanner_rounded,
+                  icon: LucideIcons.scanLine,
                   label: 'Smart Scan',
-                  color: AppTheme.accentOrange,
-                  onTap: () {
-                    ref
-                        .read(documentScanNotifierProvider.notifier)
-                        .startDocumentScan();
-                    Navigator.of(context).pop();
-                  },
+                  onTap: () => _open(
+                    context,
+                    const CustomScanView(mode: CustomScanMode.document),
+                  ),
                 ),
                 ToolCircleItem(
-                  icon: Icons.badge_outlined,
+                  icon: LucideIcons.creditCard,
                   label: 'ID Card',
-                  color: AppTheme.accentBrown,
-                  onTap: () => _open(context, const IdCardScanView()),
+                  onTap: () => _open(
+                    context,
+                    const CustomScanView(mode: CustomScanMode.idCard),
+                  ),
                 ),
                 ToolCircleItem(
-                  icon: Icons.text_fields_rounded,
+                  icon: LucideIcons.type,
                   label: 'OCR',
-                  color: AppTheme.accentGold,
                   onTap: () => _open(context, const OcrResultView()),
                 ),
                 ToolCircleItem(
-                  icon: Icons.file_upload_outlined,
+                  icon: LucideIcons.upload,
                   label: 'Import',
-                  color: AppTheme.accentBlue,
                   onTap: () =>
                       ref.read(pdfToolsNotifierProvider.notifier).importFiles(),
                 ),
@@ -89,39 +87,33 @@ class ToolsHubView extends ConsumerWidget {
               title: 'PDF Tools',
               children: <Widget>[
                 ToolCircleItem(
-                  icon: Icons.call_merge_rounded,
+                  icon: LucideIcons.combine,
                   label: 'Merge',
-                  color: AppTheme.accentPink,
                   onTap: () => _open(context, const MergePdfView()),
                 ),
                 ToolCircleItem(
-                  icon: Icons.branding_watermark_outlined,
+                  icon: LucideIcons.stamp,
                   label: 'Watermark',
-                  color: AppTheme.accentPurple,
                   onTap: () => _open(context, const WatermarkView()),
                 ),
                 ToolCircleItem(
-                  icon: Icons.draw_outlined,
+                  icon: LucideIcons.pencil,
                   label: 'Sign',
-                  color: AppTheme.accentRed,
                   onTap: () => _open(context, const SignatureView()),
                 ),
                 ToolCircleItem(
-                  icon: Icons.lock_outline_rounded,
+                  icon: LucideIcons.lock,
                   label: 'Protect',
-                  color: AppTheme.accentTeal,
                   onTap: () => _open(context, const PasswordLockView()),
                 ),
                 ToolCircleItem(
-                  icon: Icons.compress_rounded,
+                  icon: LucideIcons.minimize2,
                   label: 'Compress',
-                  color: AppTheme.accentGold,
                   onTap: () => _open(context, const CompressView()),
                 ),
                 ToolCircleItem(
-                  icon: Icons.image_outlined,
+                  icon: LucideIcons.image,
                   label: 'To Image',
-                  color: AppTheme.accentBlue,
                   onTap: () => _open(context, const PdfToImageView()),
                 ),
               ],

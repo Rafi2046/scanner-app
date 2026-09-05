@@ -110,5 +110,58 @@ final authServiceProvider = Provider<AuthService>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef AuthServiceRef = ProviderRef<AuthService>;
+String _$cameraCaptureServiceHash() =>
+    r'6bb1beb2c17634ccb63e8a123454275b6f386adf';
+
+/// See also [cameraCaptureService].
+@ProviderFor(cameraCaptureService)
+final cameraCaptureServiceProvider = Provider<CameraCaptureService>.internal(
+  cameraCaptureService,
+  name: r'cameraCaptureServiceProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$cameraCaptureServiceHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef CameraCaptureServiceRef = ProviderRef<CameraCaptureService>;
+String _$edgeDetectServiceHash() => r'ef15834a260ffedeeb28ce5924a60e6d3322802e';
+
+/// See also [edgeDetectService].
+@ProviderFor(edgeDetectService)
+final edgeDetectServiceProvider = Provider<EdgeDetectService>.internal(
+  edgeDetectService,
+  name: r'edgeDetectServiceProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$edgeDetectServiceHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef EdgeDetectServiceRef = ProviderRef<EdgeDetectService>;
+String _$scanEnhanceServiceHash() =>
+    r'cc23037d65eac9485bce70d420cdc73035f83b78';
+
+/// See also [scanEnhanceService].
+@ProviderFor(scanEnhanceService)
+final scanEnhanceServiceProvider = Provider<ScanEnhanceService>.internal(
+  scanEnhanceService,
+  name: r'scanEnhanceServiceProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$scanEnhanceServiceHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef ScanEnhanceServiceRef = ProviderRef<ScanEnhanceService>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

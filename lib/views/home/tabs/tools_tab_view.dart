@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:scanner_app/app/theme.dart';
 import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/views/home/widgets/tool_circle_item.dart';
 import 'package:scanner_app/views/home/widgets/tools_section_card.dart';
 
-/// Tab 2: Tools hub with pastel shortcuts.
+/// Tab 2: Tools hub with monochrome Lucide shortcuts.
 class ToolsTabView extends StatelessWidget {
   const ToolsTabView({
     super.key,
@@ -54,27 +55,23 @@ class ToolsTabView extends StatelessWidget {
           title: 'Scan & Capture',
           children: <Widget>[
             ToolCircleItem(
-              icon: Icons.document_scanner_rounded,
+              icon: LucideIcons.scanLine,
               label: 'Smart Scan',
-              color: AppTheme.accentOrange,
               onTap: onSmartScan,
             ),
             ToolCircleItem(
-              icon: Icons.badge_outlined,
+              icon: LucideIcons.creditCard,
               label: 'ID Card',
-              color: AppTheme.accentBrown,
               onTap: onIdCard,
             ),
             ToolCircleItem(
-              icon: Icons.text_fields_rounded,
+              icon: LucideIcons.type,
               label: 'OCR',
-              color: AppTheme.accentGold,
               onTap: onOcr,
             ),
             ToolCircleItem(
-              icon: Icons.file_upload_outlined,
+              icon: LucideIcons.upload,
               label: 'Import',
-              color: AppTheme.accentBlue,
               onTap: onImport,
             ),
           ],
@@ -84,39 +81,33 @@ class ToolsTabView extends StatelessWidget {
           title: 'PDF Tools',
           children: <Widget>[
             ToolCircleItem(
-              icon: Icons.call_merge_rounded,
+              icon: LucideIcons.combine,
               label: 'Merge',
-              color: AppTheme.accentPink,
               onTap: onMergePdf,
             ),
             ToolCircleItem(
-              icon: Icons.branding_watermark_outlined,
+              icon: LucideIcons.stamp,
               label: 'Watermark',
-              color: AppTheme.accentPurple,
               onTap: onWatermark,
             ),
             ToolCircleItem(
-              icon: Icons.draw_outlined,
+              icon: LucideIcons.pencil,
               label: 'Sign',
-              color: AppTheme.accentRed,
               onTap: onSign,
             ),
             ToolCircleItem(
-              icon: Icons.lock_outline_rounded,
+              icon: LucideIcons.lock,
               label: 'Protect',
-              color: AppTheme.accentTeal,
               onTap: onPasswordLock,
             ),
             ToolCircleItem(
-              icon: Icons.compress_rounded,
+              icon: LucideIcons.minimize2,
               label: 'Compress',
-              color: AppTheme.accentGold,
               onTap: onCompress,
             ),
             ToolCircleItem(
-              icon: Icons.image_outlined,
+              icon: LucideIcons.image,
               label: 'To Image',
-              color: AppTheme.accentBlue,
               onTap: onPdfToImage,
             ),
           ],
