@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/core/enums/scan_filter.dart';
 
-/// Horizontal visual filter selector with stylized miniature document cards.
-/// Designed exclusively for our scanner app with a modern, high-contrast aesthetic.
+/// Clean, sleek visual filter selector with refined miniature document cards.
+/// Perfectly proportioned to look lightweight, sharp, and non-bulky.
 class ScanFilterVisualCarousel extends StatelessWidget {
   const ScanFilterVisualCarousel({
     super.key,
@@ -17,20 +18,23 @@ class ScanFilterVisualCarousel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 104,
+      height: 84,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: AppConstants.pagePadding),
         itemCount: ScanFilter.values.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (BuildContext context, int index) {
           final ScanFilter filter = ScanFilter.values[index];
           final bool isSelected = filter == selected;
           return _FilterCard(
             filter: filter,
             isSelected: isSelected,
-            onTap: () => onSelected(filter),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onSelected(filter);
+            },
           );
         },
       ),
@@ -56,52 +60,57 @@ class _FilterCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isSelected ? accent : const Color(0xFF2C323B),
-                width: isSelected ? 2.0 : 1.0,
+      child: AnimatedScale(
+        scale: isSelected ? 1.03 : 1.0,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(
+                  color: isSelected ? accent : const Color(0xFF282D35),
+                  width: isSelected ? 1.8 : 1.0,
+                ),
+                boxShadow: isSelected
+                    ? <BoxShadow>[
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.35),
+                          blurRadius: 8,
+                          offset: const Offset(0, 1),
+                        ),
+                      ]
+                    : null,
               ),
-              boxShadow: isSelected
-                  ? <BoxShadow>[
-                      BoxShadow(
-                        color: accent.withValues(alpha: 0.35),
-                        blurRadius: 8,
-                        spreadRadius: 1,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: _buildThumbnailPreview(filter),
-            ),
-          ),
-          const SizedBox(height: 6),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-            decoration: BoxDecoration(
-              color: isSelected ? accent : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              filter.label,
-              style: TextStyle(
-                color: isSelected ? const Color(0xFF0F141A) : Colors.white70,
-                fontSize: 10.5,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: _buildThumbnailPreview(filter),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 5),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: isSelected ? accent : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                filter.label,
+                style: TextStyle(
+                  color: isSelected ? const Color(0xFF0A1017) : Colors.white60,
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -109,48 +118,49 @@ class _FilterCard extends StatelessWidget {
   Widget _buildThumbnailPreview(ScanFilter filter) {
     return switch (filter) {
       ScanFilter.original => _renderDocPaper(
-          background: const Color(0xFFDFD9C5),
-          inkColor: const Color(0xFF423B30),
-          badgeColor: const Color(0xFF8D7F67),
+          background: const Color(0xFFE8E2D0),
+          inkColor: const Color(0xFF383226),
+          badgeColor: const Color(0xFF7A6D56),
           badgeLabel: 'RAW',
-          hasShadowGradient: true,
+          hasNaturalShadow: true,
         ),
       ScanFilter.color => _renderDocPaper(
           background: Colors.white,
-          inkColor: const Color(0xFF1E242B),
+          inkColor: const Color(0xFF161A20),
           badgeColor: accent,
-          badgeLabel: 'AI PRO',
-          isCrisp: true,
+          badgeLabel: 'MAGIC',
+          isColorAi: true,
         ),
       ScanFilter.noShadow => _renderDocPaper(
-          background: const Color(0xFFF6F8FA),
-          inkColor: const Color(0xFF24292E),
-          badgeColor: const Color(0xFF00A389),
+          background: const Color(0xFFF8FAFC),
+          inkColor: const Color(0xFF1E293B),
+          badgeColor: const Color(0xFF0EA5E9),
           badgeLabel: 'CLEAN',
         ),
       ScanFilter.bw => _renderDocPaper(
           background: Colors.white,
           inkColor: Colors.black,
-          badgeColor: const Color(0xFF1E2124),
+          badgeColor: const Color(0xFF0F172A),
           badgeLabel: 'B&W',
-          isStark: true,
+          isPureBw: true,
         ),
       ScanFilter.grayscale => _renderDocPaper(
-          background: const Color(0xFFE9ECEF),
-          inkColor: const Color(0xFF495057),
-          badgeColor: const Color(0xFF6C757D),
+          background: const Color(0xFFE2E8F0),
+          inkColor: const Color(0xFF334155),
+          badgeColor: const Color(0xFF64748B),
           badgeLabel: 'GRAY',
+          hasMonoPhoto: true,
         ),
       ScanFilter.lighten => _renderDocPaper(
           background: Colors.white,
-          inkColor: const Color(0xFF868E96),
-          badgeColor: const Color(0xFFADB5BD),
+          inkColor: const Color(0xFF94A3B8),
+          badgeColor: const Color(0xFFCBD5E1),
           badgeLabel: 'LITE',
         ),
       ScanFilter.invert => _renderDocPaper(
-          background: const Color(0xFF14171C),
-          inkColor: const Color(0xFFF1F3F5),
-          badgeColor: const Color(0xFF343A40),
+          background: const Color(0xFF0F172A),
+          inkColor: const Color(0xFFF8FAFC),
+          badgeColor: const Color(0xFF334155),
           badgeLabel: 'INV',
         ),
     };
@@ -161,15 +171,16 @@ class _FilterCard extends StatelessWidget {
     required Color inkColor,
     required Color badgeColor,
     required String badgeLabel,
-    bool hasShadowGradient = false,
-    bool isCrisp = false,
-    bool isStark = false,
+    bool hasNaturalShadow = false,
+    bool isColorAi = false,
+    bool isPureBw = false,
+    bool hasMonoPhoto = false,
   }) {
     return Container(
       color: background,
       child: Stack(
         children: <Widget>[
-          if (hasShadowGradient)
+          if (hasNaturalShadow)
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
@@ -177,7 +188,7 @@ class _FilterCard extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: <Color>[
-                      Colors.black.withValues(alpha: 0.18),
+                      Colors.black.withValues(alpha: 0.20),
                       Colors.transparent,
                     ],
                   ),
@@ -185,46 +196,94 @@ class _FilterCard extends StatelessWidget {
               ),
             ),
           Padding(
-            padding: const EdgeInsets.all(4.5),
+            padding: const EdgeInsets.all(4.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                // Document mini header: icon + badge
+                // Document header: badge
                 Row(
                   children: <Widget>[
-                    Icon(
-                      Icons.article_rounded,
-                      size: 9,
-                      color: isCrisp ? accent : inkColor.withValues(alpha: 0.8),
-                    ),
-                    const SizedBox(width: 2.5),
+                    if (isColorAi)
+                      const Icon(
+                        Icons.auto_awesome,
+                        size: 7,
+                        color: accent,
+                      )
+                    else
+                      Icon(
+                        Icons.description_rounded,
+                        size: 7,
+                        color: inkColor.withValues(alpha: 0.7),
+                      ),
+                    const SizedBox(width: 2),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 0.5),
                       decoration: BoxDecoration(
                         color: badgeColor,
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: BorderRadius.circular(1.5),
                       ),
                       child: Text(
                         badgeLabel,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 6.5,
-                          fontWeight: FontWeight.w800,
+                        style: TextStyle(
+                          color: isColorAi ? const Color(0xFF0A1017) : Colors.white,
+                          fontSize: 5.5,
+                          fontWeight: FontWeight.w900,
                           letterSpacing: 0.2,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 3.5),
-                // Stylized text skeleton lines
-                _line(inkColor.withValues(alpha: isStark ? 1.0 : 0.75), 36),
-                const SizedBox(height: 2),
-                _line(inkColor.withValues(alpha: isStark ? 1.0 : 0.9), 46),
-                const SizedBox(height: 2),
-                _line(inkColor.withValues(alpha: isStark ? 1.0 : 0.65), 30),
-                const SizedBox(height: 2),
-                _line(inkColor.withValues(alpha: isStark ? 1.0 : 0.8), 40),
+                const SizedBox(height: 3),
+
+                // Skeleton body
+                if (hasMonoPhoto)
+                  Row(
+                    children: <Widget>[
+                      Container(
+                        width: 10,
+                        height: 10,
+                        margin: const EdgeInsets.only(right: 2.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF94A3B8),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                        child: const Icon(Icons.person, size: 7, color: Colors.white70),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            _line(inkColor, 24),
+                            const SizedBox(height: 1.5),
+                            _line(inkColor.withValues(alpha: 0.7), 18),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )
+                else if (isColorAi)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      _line(const Color(0xFF2563EB), 26),
+                      const SizedBox(height: 1.8),
+                      _line(inkColor.withValues(alpha: 0.85), 36),
+                      const SizedBox(height: 1.8),
+                      _line(inkColor.withValues(alpha: 0.65), 28),
+                    ],
+                  )
+                else
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      _line(inkColor, isPureBw ? 34 : 28),
+                      const SizedBox(height: 1.8),
+                      _line(inkColor.withValues(alpha: isPureBw ? 1.0 : 0.75), isPureBw ? 38 : 34),
+                      const SizedBox(height: 1.8),
+                      _line(inkColor.withValues(alpha: isPureBw ? 1.0 : 0.60), 22),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -236,7 +295,7 @@ class _FilterCard extends StatelessWidget {
   Widget _line(Color color, double width) {
     return Container(
       width: width,
-      height: 2.2,
+      height: 1.8,
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(1),

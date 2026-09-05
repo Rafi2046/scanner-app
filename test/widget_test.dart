@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scanner_app/app/app.dart';
+import 'package:scanner_app/views/home/widgets/files_storage_meter.dart';
 
 void main() {
-  testWidgets('HomeView shows Scanner title, Bento tools, and Scan FAB',
+  testWidgets('HomeView shows Scanner title, Bento tools, and Scan button',
       (WidgetTester tester) async {
     await tester.pumpWidget(
       const ProviderScope(
@@ -15,18 +16,17 @@ void main() {
     // Verify Brand title & header
     expect(find.text('Scanner'), findsOneWidget);
 
-    // Verify Bento Grid tools
-    expect(find.text('Smart Scan'), findsOneWidget);
+    // Verify Quick Tools
     expect(find.text('ID Card'), findsOneWidget);
-    expect(find.text('Text OCR'), findsOneWidget);
-    expect(find.text('Merge PDF'), findsOneWidget);
+    expect(find.text('eSign'), findsOneWidget);
+    expect(find.text('Watermark'), findsOneWidget);
     expect(find.text('All Tools'), findsOneWidget);
 
-    // Verify Recent Documents section
-    expect(find.text('Recent Documents'), findsOneWidget);
+    // Verify Recent Files section
+    expect(find.text('Recent Files'), findsOneWidget);
 
-    // Verify Scan FAB
-    expect(find.text('Scan'), findsOneWidget);
+    // Verify Scan option
+    expect(find.text('Scan'), findsWidgets);
   });
 
   testWidgets('Search input field updates text', (WidgetTester tester) async {
@@ -56,18 +56,16 @@ void main() {
     // Tap Files tab
     await tester.tap(find.text('Files'));
     await tester.pump();
-    expect(find.text('Document Library'), findsOneWidget);
+    expect(find.byType(FilesStorageMeter), findsOneWidget);
 
     // Tap Tools tab
     await tester.tap(find.text('Tools'));
     await tester.pump();
-    expect(find.text('Tools Hub'), findsOneWidget);
+    expect(find.text('Scan & Capture'), findsOneWidget);
 
-    // Tap Me tab
-    await tester.tap(find.text('Me'));
+    // Tap Account tab
+    await tester.tap(find.text('Account'));
     await tester.pump();
-    expect(find.text('Rafi'), findsOneWidget);
+    expect(find.text('Local user'), findsOneWidget);
   });
 }
-
-

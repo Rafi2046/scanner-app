@@ -11,6 +11,9 @@ enum ScanFilter {
   /// Alias for backward compatibility with existing code
   static const ScanFilter color = magicEnhance;
 
+  /// Print-ready Black & White document filter (CamScanner style)
+  static const ScanFilter bwPrint = bw;
+
   String get label => switch (this) {
         ScanFilter.original => 'Original',
         ScanFilter.magicEnhance => 'Magic Enhance',

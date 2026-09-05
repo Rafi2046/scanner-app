@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Bottom action bar for Enhance view with custom signature styling.
+/// Clean, minimalist, and ultra-responsive bottom action toolbar for Enhance view.
+/// Perfectly proportioned to prevent overflow on narrow screens while maintaining
+/// CamScanner Pro elegance and tactile micro-interactions.
 class ScanEnhanceBottomBar extends StatelessWidget {
   const ScanEnhanceBottomBar({
     super.key,
@@ -11,6 +13,7 @@ class ScanEnhanceBottomBar extends StatelessWidget {
     required this.onExtractText,
     required this.onSign,
     required this.onConfirm,
+    this.pageCount = 1,
     this.busy = false,
   });
 
@@ -20,6 +23,7 @@ class ScanEnhanceBottomBar extends StatelessWidget {
   final VoidCallback onExtractText;
   final VoidCallback onSign;
   final VoidCallback onConfirm;
+  final int pageCount;
   final bool busy;
 
   static const Color accent = Color(0xFF00D2A0);
@@ -27,13 +31,16 @@ class ScanEnhanceBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF14171C),
+      decoration: BoxDecoration(
+        color: const Color(0xFF11141A),
         border: Border(
-          top: BorderSide(color: Color(0xFF22262F), width: 1),
+          top: BorderSide(
+            color: Colors.white.withValues(alpha: 0.07),
+            width: 0.8,
+          ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: SafeArea(
         top: false,
         child: Row(
@@ -47,7 +54,7 @@ class ScanEnhanceBottomBar extends StatelessWidget {
             ),
             Expanded(
               child: _ToolbarAction(
-                icon: Icons.rotate_left_rounded,
+                icon: Icons.rotate_right_rounded,
                 label: 'Rotate',
                 onTap: busy ? null : onRotateLeft,
               ),
@@ -61,8 +68,8 @@ class ScanEnhanceBottomBar extends StatelessWidget {
             ),
             Expanded(
               child: _ToolbarAction(
-                icon: Icons.document_scanner_outlined,
-                label: 'OCR Text',
+                icon: Icons.document_scanner_rounded,
+                label: 'OCR',
                 badge: 'AI',
                 badgeColor: accent,
                 onTap: busy ? null : onExtractText,
@@ -70,30 +77,35 @@ class ScanEnhanceBottomBar extends StatelessWidget {
             ),
             Expanded(
               child: _ToolbarAction(
-                icon: Icons.draw_outlined,
+                icon: Icons.draw_rounded,
                 label: 'Sign',
                 onTap: busy ? null : onSign,
               ),
             ),
-            const SizedBox(width: 8),
-            // Glowing Confirm Checkmark Button with large touch target
+            const SizedBox(width: 6),
+
+            // Clean, non-bulky checkmark save button with optional page counter badge
             Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: busy ? null : onConfirm,
+                onTap: busy
+                    ? null
+                    : () {
+                        HapticFeedback.mediumImpact();
+                        onConfirm();
+                      },
                 borderRadius: BorderRadius.circular(12),
-                splashColor: Colors.white.withValues(alpha: 0.3),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: 52,
-                  height: 48,
+                splashColor: Colors.white.withValues(alpha: 0.25),
+                child: Container(
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: <Color>[
-                        Color(0xFF00E6B0),
-                        Color(0xFF00B388),
+                        Color(0xFF00E5A3),
+                        Color(0xFF00B078),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(12),
@@ -105,21 +117,53 @@ class ScanEnhanceBottomBar extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Center(
-                    child: busy
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.check_rounded,
-                            color: Color(0xFF0F141A),
-                            size: 26,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none,
+                    children: <Widget>[
+                      if (busy)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.0,
+                            color: Color(0xFF07120E),
                           ),
+                        )
+                      else
+                        const Icon(
+                          Icons.check_rounded,
+                          color: Color(0xFF07120E),
+                          size: 24,
+                        ),
+
+                      // Multi-page count badge
+                      if (!busy && pageCount > 1)
+                        Positioned(
+                          top: -3,
+                          right: -3,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1B2028),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: accent, width: 1.0),
+                            ),
+                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                            child: Center(
+                              child: Text(
+                                '$pageCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -158,13 +202,13 @@ class _ToolbarAction extends StatelessWidget {
                 onTap!();
               }
             : null,
-        borderRadius: BorderRadius.circular(10),
-        splashColor: const Color(0xFF00D2A0).withValues(alpha: 0.25),
-        highlightColor: const Color(0xFF00D2A0).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        splashColor: const Color(0xFF00D2A0).withValues(alpha: 0.15),
+        highlightColor: const Color(0xFF00D2A0).withValues(alpha: 0.08),
         child: Container(
-          height: 50,
+          height: 44,
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          padding: const EdgeInsets.symmetric(vertical: 2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -176,31 +220,32 @@ class _ToolbarAction extends StatelessWidget {
                   Icon(
                     icon,
                     color: enabled ? Colors.white : Colors.white38,
-                    size: 22,
+                    size: 19,
                   ),
                   if (badge != null)
                     Positioned(
-                      right: -10,
-                      top: -4,
+                      right: -8,
+                      top: -3,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
                         decoration: BoxDecoration(
                           color: badgeColor ?? const Color(0xFF3B82F6),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           badge!,
                           style: const TextStyle(
                             color: Colors.black,
-                            fontSize: 8,
-                            fontWeight: FontWeight.w800,
+                            fontSize: 7.5,
+                            fontWeight: FontWeight.w900,
+                            height: 1.0,
                           ),
                         ),
                       ),
                     ),
                 ],
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               Text(
                 label,
                 maxLines: 1,
@@ -208,7 +253,7 @@ class _ToolbarAction extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: enabled ? Colors.white70 : Colors.white24,
-                  fontSize: 10,
+                  fontSize: 9.5,
                   fontWeight: FontWeight.w500,
                 ),
               ),

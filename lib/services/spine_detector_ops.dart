@@ -125,14 +125,44 @@ class SpineDetectorOps {
 
   static List<Offset> orderPoints(List<Offset> pts) {
     if (pts.length != 4) return pts;
-    final List<Offset> bySum = List<Offset>.from(pts)
-      ..sort((Offset a, Offset b) => (a.dx + a.dy).compareTo(b.dx + b.dy));
-    final Offset tl = bySum.first;
-    final Offset br = bySum.last;
-    final List<Offset> byDiff = List<Offset>.from(pts)
-      ..sort((Offset a, Offset b) => (a.dy - a.dx).compareTo(b.dy - b.dx));
-    final Offset tr = byDiff.first;
-    final Offset bl = byDiff.last;
-    return <Offset>[tl, tr, br, bl];
+
+    final double cx = (pts[0].dx + pts[1].dx + pts[2].dx + pts[3].dx) / 4.0;
+    final double cy = (pts[0].dy + pts[1].dy + pts[2].dy + pts[3].dy) / 4.0;
+
+    final List<Offset> angular = List<Offset>.from(pts)
+      ..sort((Offset a, Offset b) {
+        final double angleA = math.atan2(a.dy - cy, a.dx - cx);
+        final double angleB = math.atan2(b.dy - cy, b.dx - cx);
+        return angleA.compareTo(angleB);
+      });
+
+    int minIdx = 0;
+    double minSum = angular[0].dx + angular[0].dy;
+    for (int i = 1; i < 4; i++) {
+      final double sum = angular[i].dx + angular[i].dy;
+      if (sum < minSum) {
+        minSum = sum;
+        minIdx = i;
+      }
+    }
+
+    final List<Offset> rotated = <Offset>[
+      angular[minIdx],
+      angular[(minIdx + 1) % 4],
+      angular[(minIdx + 2) % 4],
+      angular[(minIdx + 3) % 4],
+    ];
+
+    final double v1x = rotated[1].dx - rotated[0].dx;
+    final double v1y = rotated[1].dy - rotated[0].dy;
+    final double v2x = rotated[2].dx - rotated[1].dx;
+    final double v2y = rotated[2].dy - rotated[1].dy;
+    final double cross = (v1x * v2y) - (v1y * v2x);
+
+    if (cross < 0) {
+      return <Offset>[rotated[0], rotated[3], rotated[2], rotated[1]];
+    }
+
+    return rotated;
   }
 }

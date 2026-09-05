@@ -16,12 +16,12 @@ Uint8List applyScanFilterIsolate(({
 
   final ScanFilter filter = ScanFilter.values.firstWhere(
     (ScanFilter f) => f.name == args.filterName,
-    orElse: () => ScanFilter.color,
+    orElse: () => args.filterName == 'bwPrint' ? ScanFilter.bw : ScanFilter.magicEnhance,
   );
 
   final img.Image out = switch (filter) {
     ScanFilter.original => decoded,
-    ScanFilter.color => _magicColorFilter(decoded),
+    ScanFilter.magicEnhance => _magicColorFilter(decoded),
     ScanFilter.noShadow => _noShadowFilter(decoded),
     ScanFilter.bw => _bwScanFilter(decoded),
     ScanFilter.grayscale => _grayscaleFilter(decoded),
@@ -33,7 +33,6 @@ Uint8List applyScanFilterIsolate(({
     img.encodeJpg(out, quality: args.quality),
   );
 }
-
 
 /// Isolate entry: rotates image bytes by [angle] degrees (e.g. -90, 90).
 Uint8List rotateJpegBytesIsolate(({
@@ -51,17 +50,33 @@ Uint8List rotateJpegBytesIsolate(({
   );
 }
 
-/// CamScanner "Magic Color": Local background equalization + shadow removal + white-paper boost.
+/// CamScanner "Magic Enhance" (Color Document):
+/// Background illumination division + contrast stretch + saturation boost + unsharp mask sharpening.
 img.Image _magicColorFilter(img.Image src) {
-  return _processDocument(src, blackCut: 0.44, whiteCut: 0.88, isColor: true);
+  final img.Image enhanced = _processDocument(
+    src,
+    blackCut: 0.44,
+    whiteCut: 0.88,
+    isColor: true,
+    boostSaturation: true,
+  );
+  return _unsharpMaskDart(enhanced, amount: 0.45);
 }
 
 /// CamScanner "No Shadow": Soft shadow flattening, preserving fine handwriting and stamps.
 img.Image _noShadowFilter(img.Image src) {
-  return _processDocument(src, blackCut: 0.36, whiteCut: 0.84, isColor: true);
+  return _processDocument(
+    src,
+    blackCut: 0.36,
+    whiteCut: 0.84,
+    isColor: true,
+    boostSaturation: false,
+  );
 }
 
-/// Pure black & white photocopier / high-contrast flatbed scan.
+/// Pure Black & White (CamScanner bwPrint):
+/// Optical background division followed by adaptive local thresholding for pure 0 (black ink)
+/// and 255 (paper white), eliminating shadows and uneven lighting for crisp printing.
 img.Image _bwScanFilter(img.Image src) {
   final int w = src.width;
   final int h = src.height;
@@ -71,8 +86,8 @@ img.Image _bwScanFilter(img.Image src) {
   final Float32List bgGrid = _estimateBackgroundGrid(luma, w, h, gridCols, gridRows);
   final img.Image dst = img.Image(width: w, height: h);
 
-  const double blackCut = 0.62;
-  const double whiteCut = 0.82;
+  // Print-ready threshold: relative ratio of pixel luminance to local background sheet
+  const double thresholdRatio = 0.78;
 
   for (int y = 0; y < h; y++) {
     final double gy = (y / h) * (gridRows - 1);
@@ -91,20 +106,14 @@ img.Image _bwScanFilter(img.Image src) {
       final double b10 = bgGrid[gy0 * gridCols + gx1];
       final double b01 = bgGrid[gy1 * gridCols + gx0];
       final double b11 = bgGrid[gy1 * gridCols + gx1];
-      final double bg = (b00 + tx * (b10 - b00)) + ty * ((b01 + tx * (b11 - b01)) - (b00 + tx * (b10 - b00)));
+      final double bg = (b00 + tx * (b10 - b00)) +
+          ty * ((b01 + tx * (b11 - b01)) - (b00 + tx * (b10 - b00)));
 
       final int curLuma = luma[rowOff + x];
       final double ratio = curLuma / (bg > 12.0 ? bg : 12.0);
 
-      int val;
-      if (ratio >= whiteCut) {
-        val = 255;
-      } else if (ratio <= blackCut) {
-        val = 0;
-      } else {
-        final double t = (ratio - blackCut) / (whiteCut - blackCut);
-        val = (t * 255.0).round().clamp(0, 255);
-      }
+      // Pure binary decision: solid black text (0) or pure white paper (255)
+      final int val = ratio < thresholdRatio ? 0 : 255;
       dst.setPixelRgb(x, y, val, val, val);
     }
   }
@@ -112,9 +121,16 @@ img.Image _bwScanFilter(img.Image src) {
   return dst;
 }
 
-/// Clean grayscale flatbed scanner look.
+/// Clean grayscale flatbed scanner look: smooth continuous midtones with crisp white paper.
 img.Image _grayscaleFilter(img.Image src) {
-  return _processDocument(src, blackCut: 0.40, whiteCut: 0.88, isColor: false);
+  final img.Image gray = _processDocument(
+    src,
+    blackCut: 0.40,
+    whiteCut: 0.88,
+    isColor: false,
+    boostSaturation: false,
+  );
+  return _unsharpMaskDart(gray, amount: 0.25);
 }
 
 /// Lightens shadows and boosts brightness while keeping original color palette.
@@ -134,6 +150,7 @@ img.Image _processDocument(
   required double blackCut,
   required double whiteCut,
   required bool isColor,
+  required bool boostSaturation,
 }) {
   final int w = src.width;
   final int h = src.height;
@@ -181,10 +198,25 @@ img.Image _processDocument(
       if (isColor) {
         final double gain = curLuma > 0 ? (targetLuma / curLuma) : 1.0;
         final img.Pixel p = src.getPixel(x, y);
-        final int r = (p.r * gain).round().clamp(0, 255);
-        final int g = (p.g * gain).round().clamp(0, 255);
-        final int b = (p.b * gain).round().clamp(0, 255);
-        dst.setPixelRgb(x, y, r, g, b);
+        double r = p.r * gain;
+        double g = p.g * gain;
+        double b = p.b * gain;
+
+        if (boostSaturation) {
+          final double finalLuma = 0.299 * r + 0.587 * g + 0.114 * b;
+          const double satFactor = 1.25;
+          r = finalLuma + (r - finalLuma) * satFactor;
+          g = finalLuma + (g - finalLuma) * satFactor;
+          b = finalLuma + (b - finalLuma) * satFactor;
+        }
+
+        dst.setPixelRgb(
+          x,
+          y,
+          r.round().clamp(0, 255),
+          g.round().clamp(0, 255),
+          b.round().clamp(0, 255),
+        );
       } else {
         final int v = targetLuma.round().clamp(0, 255);
         dst.setPixelRgb(x, y, v, v, v);
@@ -192,6 +224,41 @@ img.Image _processDocument(
     }
   }
 
+  return dst;
+}
+
+/// Applies an Unsharp Mask filter using a discrete Laplacian edge kernel to sharpen printed text.
+img.Image _unsharpMaskDart(img.Image src, {required double amount}) {
+  final int w = src.width;
+  final int h = src.height;
+  final img.Image dst = img.Image(width: w, height: h);
+
+  for (int y = 0; y < h; y++) {
+    final int ym1 = y > 0 ? y - 1 : y;
+    final int yp1 = y < h - 1 ? y + 1 : y;
+
+    for (int x = 0; x < w; x++) {
+      final int xm1 = x > 0 ? x - 1 : x;
+      final int xp1 = x < w - 1 ? x + 1 : x;
+
+      final img.Pixel c = src.getPixel(x, y);
+      final img.Pixel top = src.getPixel(x, ym1);
+      final img.Pixel bot = src.getPixel(x, yp1);
+      final img.Pixel lft = src.getPixel(xm1, y);
+      final img.Pixel rgt = src.getPixel(xp1, y);
+
+      // Discrete Laplacian high-pass: 4 * center - (top + bottom + left + right)
+      final double lapR = 4.0 * c.r - (top.r + bot.r + lft.r + rgt.r);
+      final double lapG = 4.0 * c.g - (top.g + bot.g + lft.g + rgt.g);
+      final double lapB = 4.0 * c.b - (top.b + bot.b + lft.b + rgt.b);
+
+      final int nr = (c.r + amount * lapR).round().clamp(0, 255);
+      final int ng = (c.g + amount * lapG).round().clamp(0, 255);
+      final int nb = (c.b + amount * lapB).round().clamp(0, 255);
+
+      dst.setPixelRgb(x, y, nr, ng, nb);
+    }
+  }
   return dst;
 }
 

@@ -4,12 +4,12 @@ import 'dart:ui' show Offset;
 import 'package:opencv_dart/opencv.dart' as cv;
 import 'package:scanner_app/models/scan_quad.dart';
 
-typedef DetectCornersResult = ({int width, int height, List<double> flat});
+typedef DetectCornersResult = ({int width, int height, List<double> flat, bool isDetected});
 typedef WarpArgs = ({String path, List<double> flat, String outputPath});
 
 /// Sync OpenCV paper edge detection — run only inside [Isolate.run].
-/// Uses text-erasure morphological closing, multi-channel segmentation (Otsu + Canny),
-/// and smart document scoring (centrality, contrast, aspect ratio, border rejection).
+/// Uses text-erasure morphological closing, multi-channel segmentation (Gaussian adaptive threshold,
+/// Otsu, Canny, inverted adaptive, inverted Otsu), and smart document scoring.
 DetectCornersResult detectCornersSync(String path) {
   final cv.Mat src = cv.imread(path);
   if (src.isEmpty) {
@@ -52,10 +52,12 @@ DetectCornersResult detectCornersSync(String path) {
 
     blurred = cv.gaussianBlur(textErased, (5, 5), 1.5);
 
-    // 2. Multi-strategy edge maps
+    // 2. Multi-strategy edge maps for challenging environments (room lights, bright phone screens, shadows)
     final List<cv.Mat> edgeMaps = <cv.Mat>[
+      _buildAdaptivePaperMask(blurred),
       _buildOtsuPaperMask(blurred),
       _buildCannyPaperEdges(blurred),
+      _buildInvertedAdaptivePaperMask(blurred),
       _buildInvertedOtsuPaperMask(blurred),
     ];
 
@@ -76,16 +78,16 @@ DetectCornersResult detectCornersSync(String path) {
         bottomRight: Offset(smallQuad.bottomRight.dx * invScale, smallQuad.bottomRight.dy * invScale),
         bottomLeft: Offset(smallQuad.bottomLeft.dx * invScale, smallQuad.bottomLeft.dy * invScale),
       );
-      return (width: origW, height: origH, flat: scaledQuad.toFlat());
+      return (width: origW, height: origH, flat: scaledQuad.toFlat(), isDetected: true);
     }
 
-    // High-margin fallback: 3% inset when paper covers full frame
+    // High-margin fallback: 4% inset when paper covers full frame or cannot be segmented
     final ScanQuad fallback = ScanQuad.insetRect(
       width: origW,
       height: origH,
-      insetFraction: 0.03,
+      insetFraction: 0.04,
     );
-    return (width: origW, height: origH, flat: fallback.toFlat());
+    return (width: origW, height: origH, flat: fallback.toFlat(), isDetected: false);
   } finally {
     blurred?.dispose();
     textErased?.dispose();
@@ -93,6 +95,41 @@ DetectCornersResult detectCornersSync(String path) {
     small?.dispose();
     src.dispose();
   }
+}
+
+/// Gaussian adaptive thresholding isolates document paper regardless of localized
+/// lighting variations, shadows, or bright phone screens nearby.
+cv.Mat _buildAdaptivePaperMask(cv.Mat blur) {
+  final cv.Mat thresh = cv.adaptiveThreshold(
+    blur,
+    255,
+    cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+    cv.THRESH_BINARY,
+    35,
+    7.0,
+  );
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (7, 7));
+  final cv.Mat closed = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel);
+  thresh.dispose();
+  kernel.dispose();
+  return closed;
+}
+
+/// Inverted adaptive thresholding catches dark notebook covers or passports on bright tables.
+cv.Mat _buildInvertedAdaptivePaperMask(cv.Mat blur) {
+  final cv.Mat thresh = cv.adaptiveThreshold(
+    blur,
+    255,
+    cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+    cv.THRESH_BINARY_INV,
+    35,
+    7.0,
+  );
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (7, 7));
+  final cv.Mat closed = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel);
+  thresh.dispose();
+  kernel.dispose();
+  return closed;
 }
 
 /// Otsu thresholding segments bright paper on dark/medium backgrounds.
@@ -118,10 +155,14 @@ cv.Mat _buildInvertedOtsuPaperMask(cv.Mat blur) {
 /// Canny edge detection with dilation bridges perimeter discontinuities.
 cv.Mat _buildCannyPaperEdges(cv.Mat blur) {
   final cv.Mat edges = cv.canny(blur, 25, 80);
-  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3));
-  final cv.Mat dilated = cv.dilate(edges, kernel);
+  final cv.Mat kernel5 = cv.getStructuringElement(cv.MORPH_RECT, (5, 5));
+  final cv.Mat kernel3 = cv.getStructuringElement(cv.MORPH_RECT, (3, 3));
+  final cv.Mat closed = cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel5);
+  final cv.Mat dilated = cv.dilate(closed, kernel3);
   edges.dispose();
-  kernel.dispose();
+  closed.dispose();
+  kernel5.dispose();
+  kernel3.dispose();
   return dilated;
 }
 
@@ -135,14 +176,18 @@ List<double>? _findBestPaperQuad(
   List<Offset>? bestQuad;
   double bestScore = -1.0;
 
-  final double minArea = imageArea * 0.08;
-  final double maxArea = imageArea * 0.95;
+  // Safeguard: track largest valid convex candidate quad if strict scoring rejects all
+  List<Offset>? largestValidQuad;
+  double largestValidArea = 0.0;
+
+  final double minArea = imageArea * 0.05;
+  final double maxArea = imageArea * 0.98;
 
   for (final cv.Mat map in edgeMaps) {
     try {
       final (cv.Contours contours, cv.VecVec4i hierarchy) = cv.findContours(
         map,
-        cv.RETR_LIST, // Crucial: RETR_LIST catches document borders inside frame boundaries
+        cv.RETR_LIST, // Catches document borders inside frame boundaries
         cv.CHAIN_APPROX_SIMPLE,
       );
       hierarchy.dispose();
@@ -155,10 +200,10 @@ List<double>? _findBestPaperQuad(
         }
 
         final double peri = cv.arcLength(contour, true);
-        if (peri < 60) continue;
+        if (peri < 50) continue;
 
         // Try multiple approximation tolerances for crisp or slightly curved paper edges
-        for (final double eps in <double>[0.015, 0.025, 0.035, 0.05, 0.075, 0.10]) {
+        for (final double eps in <double>[0.015, 0.02, 0.03, 0.04, 0.05, 0.075, 0.10]) {
           final cv.VecPoint approx = cv.approxPolyDP(contour, eps * peri, true);
           List<Offset>? candidatePts;
 
@@ -167,8 +212,8 @@ List<double>? _findBestPaperQuad(
               for (int k = 0; k < 4; k++)
                 Offset(approx[k].x.toDouble(), approx[k].y.toDouble()),
             ];
-          } else if (approx.length >= 5 && approx.length <= 8) {
-            candidatePts = _extractFourCornersFromPoly(approx);
+          } else if (approx.length >= 4) {
+            candidatePts = _extractFourCornersFromPoly(approx, width: width, height: height);
           }
           approx.dispose();
 
@@ -176,8 +221,20 @@ List<double>? _findBestPaperQuad(
             continue;
           }
 
+          final List<Offset> ordered = orderQuadPoints(candidatePts);
+          final double qArea = _polygonArea(ordered);
+
+          // Track largest valid convex quad as safety fallback
+          if (qArea >= minArea && qArea <= maxArea && qArea > largestValidArea) {
+            final double rect = _evaluateRectangularity(ordered);
+            if (rect >= 0.18) {
+              largestValidArea = qArea;
+              largestValidQuad = ordered;
+            }
+          }
+
           final double score = _scoreCandidateQuad(
-            candidatePts,
+            ordered,
             gray: gray,
             width: width,
             height: height,
@@ -186,7 +243,7 @@ List<double>? _findBestPaperQuad(
 
           if (score > bestScore) {
             bestScore = score;
-            bestQuad = candidatePts;
+            bestQuad = ordered;
           }
         }
       }
@@ -198,12 +255,13 @@ List<double>? _findBestPaperQuad(
     }
   }
 
-  if (bestQuad == null) {
+  final List<Offset>? chosen = bestQuad ?? largestValidQuad;
+  if (chosen == null) {
     return null;
   }
 
   // Ensure clockwise ordered points clamped to bounds
-  final List<Offset> ordered = orderQuadPoints(bestQuad);
+  final List<Offset> ordered = orderQuadPoints(chosen);
   final List<Offset> clamped = <Offset>[
     for (final Offset pt in ordered)
       Offset(
@@ -232,26 +290,26 @@ double _scoreCandidateQuad(
 
   final double qArea = _polygonArea(ord);
   final double areaRatio = qArea / imageArea;
-  if (areaRatio < 0.08 || areaRatio > 0.95) return -1.0;
+  if (areaRatio < 0.05 || areaRatio > 0.98) return -1.0;
 
-  // 1. Strict Border Check: Real paper on a desk does NOT touch 3 or 4 camera frame edges!
+  // 1. Border Check: Penalize frame touches smoothly (only reject if all 4 corners touch)
   int borderTouches = 0;
-  const double margin = 8.0;
+  const double margin = 6.0;
   for (final Offset pt in ord) {
     if (pt.dx <= margin || pt.dx >= width - margin || pt.dy <= margin || pt.dy >= height - margin) {
       borderTouches++;
     }
   }
-  if (borderTouches >= 3) {
+  if (borderTouches >= 4) {
     return -1.0; // This is the camera frame, not the document
   }
-  final double borderPenalty = (1.0 - borderTouches * 0.25).clamp(0.2, 1.0);
+  final double borderPenalty = (1.0 - borderTouches * 0.20).clamp(0.2, 1.0);
 
-  // 2. Rectangularity: Corners should be close to 90 degrees
+  // 2. Rectangularity: Corners should be reasonably close to 90 degrees (allows perspective skew)
   final double rectangularity = _evaluateRectangularity(ord);
-  if (rectangularity < 0.45) return -1.0;
+  if (rectangularity < 0.18) return -1.0;
 
-  // 3. Aspect Ratio: Standard books and documents (0.40 to 2.5)
+  // 3. Aspect Ratio: Standard books, documents, receipts, cards (0.20 to 4.5)
   final double topW = dist(ord[0], ord[1]);
   final double botW = dist(ord[3], ord[2]);
   final double leftH = dist(ord[0], ord[3]);
@@ -261,25 +319,25 @@ double _scoreCandidateQuad(
   if (avgW <= 12 || avgH <= 12) return -1.0;
 
   final double aspect = avgW / avgH;
-  if (aspect < 0.35 || aspect > 2.8) return -1.0;
+  if (aspect < 0.20 || aspect > 4.5) return -1.0;
 
   double aspectScore = 1.0;
-  if (aspect >= 0.48 && aspect <= 0.85) {
-    aspectScore = 2.2; // Standard single portrait page (A4, book, document)
-  } else if (aspect > 0.85 && aspect <= 1.25) {
-    aspectScore = 1.6; // Square document
-  } else if (aspect > 1.25 && aspect <= 1.85) {
-    aspectScore = 1.8; // Landscape spread
+  if (aspect >= 0.45 && aspect <= 0.90) {
+    aspectScore = 2.5; // Standard single portrait page (A4, book, document)
+  } else if (aspect > 0.90 && aspect <= 1.30) {
+    aspectScore = 1.8; // Square document
+  } else if (aspect > 1.30 && aspect <= 2.2) {
+    aspectScore = 2.0; // Open two-page spread or landscape document
   }
 
   // 4. Centrality: Documents are positioned near the center of the camera
   final double cx = (ord[0].dx + ord[1].dx + ord[2].dx + ord[3].dx) / (4.0 * width);
   final double cy = (ord[0].dy + ord[1].dy + ord[2].dy + ord[3].dy) / (4.0 * height);
   final double distCenter = math.sqrt((cx - 0.5) * (cx - 0.5) + (cy - 0.5) * (cy - 0.5));
-  final double centrality = (1.0 - distCenter * 1.6).clamp(0.2, 1.0);
+  final double centrality = (1.0 - distCenter * 1.5).clamp(0.2, 1.0);
 
-  // 5. Area Fitness: Prefers documents occupying 25% to 75% of the frame (like books on desks)
-  final double areaFitness = 1.0 - (areaRatio - 0.50).abs() * 0.7;
+  // 5. Area Fitness: Prefers documents occupying 20% to 85% of the frame
+  final double areaFitness = 1.0 - (areaRatio - 0.50).abs() * 0.6;
 
   // 6. Contrast Boost: Sample center luminance vs overall average
   double contrastBoost = 1.0;
@@ -287,7 +345,7 @@ double _scoreCandidateQuad(
   final int midY = (cy * height).round().clamp(0, height - 1);
   try {
     final int centerVal = gray.at<num>(midY, midX).toInt();
-    if (centerVal > 140) {
+    if (centerVal > 125) {
       contrastBoost = 1.25; // Confirmed bright paper
     }
   } catch (_) {}
@@ -329,46 +387,86 @@ double _evaluateRectangularity(List<Offset> pts) {
   return totalQuality / 4.0;
 }
 
-/// Extracts 4 extreme corners from a small polygon approximation (5 to 8 points).
-List<Offset> _extractFourCornersFromPoly(cv.VecPoint pts) {
+/// Extracts 4 extreme corners from a polygon approximation along diagonal axes relative to centroid.
+List<Offset>? _extractFourCornersFromPoly(
+  cv.VecPoint pts, {
+  required int width,
+  required int height,
+}) {
   final int count = pts.length;
-  if (count < 4) return <Offset>[];
+  if (count < 4) return null;
 
-  double minSum = double.infinity;
-  double maxSum = -double.infinity;
-  double minDiff = double.infinity;
-  double maxDiff = -double.infinity;
+  final List<Offset> points = <Offset>[
+    for (int i = 0; i < count; i++)
+      Offset(pts[i].x.toDouble(), pts[i].y.toDouble()),
+  ];
 
-  Offset tl = Offset.zero;
-  Offset br = Offset.zero;
-  Offset tr = Offset.zero;
-  Offset bl = Offset.zero;
+  // Centroid
+  double cx = 0;
+  double cy = 0;
+  for (final Offset p in points) {
+    cx += p.dx;
+    cy += p.dy;
+  }
+  cx /= count;
+  cy /= count;
 
-  for (int i = 0; i < count; i++) {
-    final double x = pts[i].x.toDouble();
-    final double y = pts[i].y.toDouble();
-    final double sum = x + y;
-    final double diff = y - x;
+  // Find 4 points maximizing projection into the 4 quadrants:
+  // NW (top-left): -dx - dy
+  // NE (top-right): +dx - dy
+  // SE (bottom-right): +dx + dy
+  // SW (bottom-left): -dx + dy
+  Offset? bestTL;
+  double scoreTL = -double.infinity;
+  Offset? bestTR;
+  double scoreTR = -double.infinity;
+  Offset? bestBR;
+  double scoreBR = -double.infinity;
+  Offset? bestBL;
+  double scoreBL = -double.infinity;
 
-    if (sum < minSum) {
-      minSum = sum;
-      tl = Offset(x, y);
+  for (final Offset p in points) {
+    final double dx = p.dx - cx;
+    final double dy = p.dy - cy;
+
+    final double sTL = -dx - dy;
+    if (sTL > scoreTL) {
+      scoreTL = sTL;
+      bestTL = p;
     }
-    if (sum > maxSum) {
-      maxSum = sum;
-      br = Offset(x, y);
+
+    final double sTR = dx - dy;
+    if (sTR > scoreTR) {
+      scoreTR = sTR;
+      bestTR = p;
     }
-    if (diff < minDiff) {
-      minDiff = diff;
-      tr = Offset(x, y);
+
+    final double sBR = dx + dy;
+    if (sBR > scoreBR) {
+      scoreBR = sBR;
+      bestBR = p;
     }
-    if (diff > maxDiff) {
-      maxDiff = diff;
-      bl = Offset(x, y);
+
+    final double sBL = -dx + dy;
+    if (sBL > scoreBL) {
+      scoreBL = sBL;
+      bestBL = p;
     }
   }
 
-  return orderQuadPoints(<Offset>[tl, tr, br, bl]);
+  if (bestTL == null || bestTR == null || bestBR == null || bestBL == null) {
+    return null;
+  }
+
+  // Ensure 4 distinct corners
+  if (dist(bestTL, bestTR) < 12 ||
+      dist(bestTR, bestBR) < 12 ||
+      dist(bestBR, bestBL) < 12 ||
+      dist(bestBL, bestTL) < 12) {
+    return null;
+  }
+
+  return orderQuadPoints(<Offset>[bestTL, bestTR, bestBR, bestBL]);
 }
 
 double _polygonArea(List<Offset> pts) {
@@ -439,20 +537,56 @@ double dist(Offset a, Offset b) {
   return math.sqrt(dx * dx + dy * dy);
 }
 
-/// Order corners to TL, TR, BR, BL.
+/// Orders 4 corners to guaranteed clockwise [TL, TR, BR, BL] sorted around centroid.
 List<Offset> orderQuadPoints(List<Offset> pts) {
   if (pts.length != 4) {
     return pts;
   }
-  final List<Offset> bySum = List<Offset>.from(pts)
-    ..sort((Offset a, Offset b) => (a.dx + a.dy).compareTo(b.dx + b.dy));
-  final Offset tl = bySum.first;
-  final Offset br = bySum.last;
-  final List<Offset> byDiff = List<Offset>.from(pts)
-    ..sort((Offset a, Offset b) => (a.dy - a.dx).compareTo(b.dy - b.dx));
-  final Offset tr = byDiff.first;
-  final Offset bl = byDiff.last;
-  return <Offset>[tl, tr, br, bl];
+
+  // 1. Calculate centroid
+  final double cx = (pts[0].dx + pts[1].dx + pts[2].dx + pts[3].dx) / 4.0;
+  final double cy = (pts[0].dy + pts[1].dy + pts[2].dy + pts[3].dy) / 4.0;
+
+  // 2. Sort by polar angle around centroid
+  final List<Offset> angular = List<Offset>.from(pts)
+    ..sort((Offset a, Offset b) {
+      final double angleA = math.atan2(a.dy - cy, a.dx - cx);
+      final double angleB = math.atan2(b.dy - cy, b.dx - cx);
+      return angleA.compareTo(angleB);
+    });
+
+  // 3. Find top-left-most corner (minimizing x + y)
+  int minIdx = 0;
+  double minSum = angular[0].dx + angular[0].dy;
+  for (int i = 1; i < 4; i++) {
+    final double sum = angular[i].dx + angular[i].dy;
+    if (sum < minSum) {
+      minSum = sum;
+      minIdx = i;
+    }
+  }
+
+  // 4. Rotate array cyclically so top-left is at index 0
+  final List<Offset> rotated = <Offset>[
+    angular[minIdx],
+    angular[(minIdx + 1) % 4],
+    angular[(minIdx + 2) % 4],
+    angular[(minIdx + 3) % 4],
+  ];
+
+  // 5. Check if orientation is clockwise using cross product: (P1 - P0) x (P2 - P1)
+  final double v1x = rotated[1].dx - rotated[0].dx;
+  final double v1y = rotated[1].dy - rotated[0].dy;
+  final double v2x = rotated[2].dx - rotated[1].dx;
+  final double v2y = rotated[2].dy - rotated[1].dy;
+  final double cross = (v1x * v2y) - (v1y * v2x);
+
+  if (cross < 0) {
+    // Counter-clockwise => swap 1 and 3 to enforce clockwise [TL, TR, BR, BL]
+    return <Offset>[rotated[0], rotated[3], rotated[2], rotated[1]];
+  }
+
+  return rotated;
 }
 
 /// Fast native OpenCV image rotation — run inside [Isolate.run].
@@ -528,6 +662,13 @@ String applyScanFilterFastSync(({
   cv.Mat? divided;
   cv.Mat? temp1;
   cv.Mat? temp2;
+  cv.Mat? hsv;
+  cv.VecMat? channels;
+  cv.Mat? satBoosted;
+  cv.VecMat? newChannels;
+  cv.Mat? hsvBoosted;
+  cv.Mat? bgrColor;
+  cv.Mat? blurMask;
 
   try {
     switch (args.filterName) {
@@ -537,17 +678,73 @@ String applyScanFilterFastSync(({
 
       case 'magicEnhance':
       case 'color':
-        // FLATBED SCANNER MACHINE LOOK:
-        // 1. Optical background division normalizes paper to pure uniform white and eliminates all shadows
+        // CAMSCANNER "MAGIC ENHANCE" (COLOR DOCUMENT):
+        // 1. Background Normalization: Optical illumination division normalizes
+        // paper to pure uniform white and eliminates all shadows and fold creases.
         bg = _extractBackgroundIllumination(src);
         divided = cv.divide(src, bg, scale: 255);
 
-        // 2. Heavy contrast & text deep-inking boost
-        temp1 = cv.convertScaleAbs(divided, alpha: 1.25, beta: 6);
+        // 2. Contrast Stretching: Linear stretching sharpens text contrast and clears paper haze.
+        temp1 = cv.convertScaleAbs(divided, alpha: 1.22, beta: 6);
 
-        // 3. Unsharp mask sharpening to make printed text razor-sharp like a 300 DPI flatbed scan
-        temp2 = cv.gaussianBlur(temp1, (3, 3), 0);
-        result = cv.addWeighted(temp1, 1.35, temp2, -0.35, 0);
+        // 3. Saturation Boost: Convert to HSV, boost Saturation channel by 25% to make
+        // colored logos, signatures, and stamps vivid and punchy.
+        hsv = cv.cvtColor(temp1, cv.COLOR_BGR2HSV);
+        channels = cv.split(hsv);
+        satBoosted = cv.convertScaleAbs(channels[1], alpha: 1.25, beta: 0);
+        newChannels = cv.VecMat.fromList(<cv.Mat>[
+          channels[0],
+          satBoosted,
+          channels[2],
+        ]);
+        hsvBoosted = cv.merge(newChannels);
+        bgrColor = cv.cvtColor(hsvBoosted, cv.COLOR_HSV2BGR);
+
+        // 4. Unsharp Mask: Enhances high-frequency edge gradients to eliminate minor lens blur.
+        blurMask = cv.gaussianBlur(bgrColor, (3, 3), 0);
+        result = cv.addWeighted(bgrColor, 1.45, blurMask, -0.45, 0);
+        break;
+
+      case 'bw':
+      case 'bwPrint':
+        // CAMSCANNER "BW PRINT" (PRINT-READY BLACK & WHITE):
+        // 1. Grayscale conversion
+        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
+
+        // 2. Optical background division on grayscale to erase shadows across the sheet
+        bg = _extractBackgroundIllumination(temp1);
+        divided = cv.divide(temp1, bg, scale: 255);
+
+        // 3. Pre-threshold smoothing: 3x3 Gaussian suppresses camera sensor CMOS noise & halftone dots
+        temp2 = cv.gaussianBlur(divided, (3, 3), 0);
+
+        // 4. Adaptive Gaussian Thresholding: Evaluates local pixel neighborhood for clean, solid black text
+        // on pure 255 white paper even if lighting was severely uneven.
+        result = cv.adaptiveThreshold(
+          temp2,
+          255,
+          cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+          cv.THRESH_BINARY,
+          25,
+          11.0,
+        );
+        break;
+
+      case 'grayscale':
+        // CAMSCANNER "GRAYSCALE" (SMOOTH MONOCHROME WITH PHOTOS/SEALS):
+        // 1. Grayscale conversion
+        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
+
+        // 2. Background illumination normalization
+        bg = _extractBackgroundIllumination(temp1);
+        divided = cv.divide(temp1, bg, scale: 255);
+
+        // 3. Moderate contrast bump: preserves smooth mid-tone gradients for photos and seals
+        temp2 = cv.convertScaleAbs(divided, alpha: 1.25, beta: -5);
+
+        // 4. Subtle unsharp mask for crisp text and line art
+        blurMask = cv.gaussianBlur(temp2, (3, 3), 0);
+        result = cv.addWeighted(temp2, 1.25, blurMask, -0.25, 0);
         break;
 
       case 'lighten':
@@ -555,34 +752,6 @@ String applyScanFilterFastSync(({
         bg = _extractBackgroundIllumination(src);
         divided = cv.divide(src, bg, scale: 255);
         result = cv.convertScaleAbs(divided, alpha: 1.08, beta: 16);
-        break;
-
-      case 'bw':
-        // PURE B&W (Photocopier / Xerox flatbed style):
-        // 1. Convert to grayscale
-        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
-        // 2. Optical background division on grayscale to completely erase shadows
-        bg = _extractBackgroundIllumination(temp1);
-        divided = cv.divide(temp1, bg, scale: 255);
-        // 3. Adaptive Gaussian thresholding on clean shadow-free paper
-        temp2 = cv.gaussianBlur(divided, (3, 3), 0);
-        result = cv.adaptiveThreshold(
-          temp2,
-          255,
-          cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-          cv.THRESH_BINARY,
-          21,
-          10.0,
-        );
-        break;
-
-      case 'grayscale':
-        // GRAYSCALE FLATBED SCAN:
-        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
-        bg = _extractBackgroundIllumination(temp1);
-        divided = cv.divide(temp1, bg, scale: 255);
-        // Contrast bump for deep black text on crisp gray/white paper
-        result = cv.convertScaleAbs(divided, alpha: 1.28, beta: -4);
         break;
 
       case 'noShadow':
@@ -593,16 +762,18 @@ String applyScanFilterFastSync(({
         break;
 
       case 'invert':
+        // INVERT: White text on dark background for blueprints or high-contrast reading
         temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
         bg = _extractBackgroundIllumination(temp1);
         divided = cv.divide(temp1, bg, scale: 255);
+        temp2 = cv.gaussianBlur(divided, (3, 3), 0);
         result = cv.adaptiveThreshold(
-          divided,
+          temp2,
           255,
           cv.ADAPTIVE_THRESH_GAUSSIAN_C,
           cv.THRESH_BINARY_INV,
-          21,
-          10.0,
+          25,
+          11.0,
         );
         break;
 
@@ -616,6 +787,13 @@ String applyScanFilterFastSync(({
     }
     return args.outputPath;
   } finally {
+    blurMask?.dispose();
+    bgrColor?.dispose();
+    hsvBoosted?.dispose();
+    newChannels?.dispose();
+    satBoosted?.dispose();
+    channels?.dispose();
+    hsv?.dispose();
     temp1?.dispose();
     temp2?.dispose();
     divided?.dispose();

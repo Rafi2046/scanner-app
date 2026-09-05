@@ -19,48 +19,91 @@ part 'custom_scan_provider.g.dart';
 
 @riverpod
 class CustomScanNotifier extends _$CustomScanNotifier {
-  final Map<ScanFilter, String> _filterCache = <ScanFilter, String>{};
+  final Map<String, String> _filterCache = <String, String>{};
+
+  String _generateDefaultTitle() {
+    final DateTime now = DateTime.now();
+    final String date = '${now.month}-${now.day}-${now.year % 100}';
+    final String time =
+        '${now.hour.toString().padLeft(2, '0')}.${now.minute.toString().padLeft(2, '0')}';
+    return 'CamScanner $date $time';
+  }
 
   @override
-  CustomScanState build() => const CustomScanState();
+  CustomScanState build() => CustomScanState(documentTitle: _generateDefaultTitle());
 
   void startSession(CustomScanMode mode) {
     _filterCache.clear();
-    state = CustomScanState(mode: mode, idSide: IdScanSide.front);
+    state = CustomScanState(
+      mode: mode,
+      idSide: IdScanSide.front,
+      documentTitle: _generateDefaultTitle(),
+    );
   }
 
   void resetSession() {
     _filterCache.clear();
-    state = const CustomScanState();
+    state = CustomScanState(documentTitle: _generateDefaultTitle());
+  }
+
+  void setDocumentTitle(String title) {
+    state = state.copyWith(documentTitle: title);
+  }
+
+  void selectPage(int index) {
+    if (index < 0 || index >= state.pages.length) return;
+    final ScanPageDraft page = state.pages[index];
+    state = state.copyWith(
+      currentPageIndex: index,
+      warpedPath: page.imagePath,
+      rawWarpedPath: page.rawPath ?? page.imagePath,
+      selectedFilter: page.filter,
+      rotationTurns: page.rotationTurns,
+      clearError: true,
+    );
   }
 
   Future<void> selectFilter(ScanFilter filter) async {
-    // Instant switch if filter is already computed and cached
-    if (_filterCache.containsKey(filter)) {
+    final int idx = state.currentPageIndex;
+    if (idx < 0 || idx >= state.pages.length) return;
+
+    final ScanPageDraft curPage = state.pages[idx];
+    final String raw = curPage.rawPath ?? curPage.imagePath;
+    final String cacheKey = '${raw}_${filter.name}';
+
+    if (_filterCache.containsKey(cacheKey)) {
+      final String cached = _filterCache[cacheKey]!;
+      final List<ScanPageDraft> next = List<ScanPageDraft>.from(state.pages);
+      next[idx] = curPage.copyWith(imagePath: cached, filter: filter);
       state = state.copyWith(
+        pages: next,
         selectedFilter: filter,
-        warpedPath: _filterCache[filter],
+        warpedPath: cached,
         clearError: true,
       );
       return;
     }
 
-    final String? raw = state.rawWarpedPath ?? state.warpedPath;
-    if (raw == null) {
-      state = state.copyWith(selectedFilter: filter, clearError: true);
-      return;
-    }
     state = state.copyWith(
       selectedFilter: filter,
       clearError: true,
     );
+
     try {
       final String processed = await ref.read(scanEnhanceServiceProvider).applyFilter(
-            imagePath: raw,
-            filter: filter,
+            raw,
+            filter,
           );
-      _filterCache[filter] = processed;
+      _filterCache[cacheKey] = processed;
+
+      final List<ScanPageDraft> next = List<ScanPageDraft>.from(state.pages);
+      next[idx] = curPage.copyWith(
+        imagePath: processed,
+        filter: filter,
+      );
+
       state = state.copyWith(
+        pages: next,
         warpedPath: processed,
         selectedFilter: filter,
       );
@@ -120,7 +163,11 @@ class CustomScanNotifier extends _$CustomScanNotifier {
         clearBusyMessage: true,
       );
     } catch (error) {
-      state = state.copyWith(busy: false, clearBusyMessage: true, error: error);
+      state = state.copyWith(
+        busy: false,
+        clearBusyMessage: true,
+        error: error,
+      );
     }
   }
 
@@ -134,8 +181,19 @@ class CustomScanNotifier extends _$CustomScanNotifier {
   }
 
   void rotateLeft() {
-    final int nextTurns = (state.rotationTurns + 3) % 4;
-    state = state.copyWith(rotationTurns: nextTurns);
+    final int idx = state.currentPageIndex;
+    if (idx < 0 || idx >= state.pages.length) return;
+
+    final ScanPageDraft curPage = state.pages[idx];
+    final int nextTurns = (curPage.rotationTurns + 3) % 4;
+
+    final List<ScanPageDraft> next = List<ScanPageDraft>.from(state.pages);
+    next[idx] = curPage.copyWith(rotationTurns: nextTurns);
+
+    state = state.copyWith(
+      pages: next,
+      rotationTurns: nextTurns,
+    );
     HapticFeedback.lightImpact();
   }
 
@@ -147,6 +205,23 @@ class CustomScanNotifier extends _$CustomScanNotifier {
       clearRotation: true,
       clearError: true,
     );
+  }
+
+  void addPageViaCamera() {
+    goToCapture();
+  }
+
+  Future<void> addPageViaGallery() async {
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      final String path =
+          await ref.read(cameraCaptureServiceProvider).pickFromGallery();
+      await onRawCaptured(path);
+    } on ScannerCancelledException {
+      state = state.copyWith(busy: false);
+    } catch (error) {
+      state = state.copyWith(busy: false, error: error);
+    }
   }
 
   Future<void> onRawCaptured(String path, {ScanQuad? liveQuad}) async {
@@ -179,64 +254,38 @@ class CustomScanNotifier extends _$CustomScanNotifier {
             quad: quad,
           );
       final String enhanced = await ref.read(scanEnhanceServiceProvider).applyFilter(
-            imagePath: rawWarped,
-            filter: ScanFilter.color,
+            rawWarped,
+            ScanFilter.magicEnhance,
           );
-      _filterCache.clear();
-      _filterCache[ScanFilter.original] = rawWarped;
-      _filterCache[ScanFilter.color] = enhanced;
+
+      final ScanPageDraft draft = ScanPageDraft(
+        imagePath: enhanced,
+        rawPath: rawWarped,
+        filter: ScanFilter.magicEnhance,
+        rotationTurns: 0,
+        idSide: state.mode == CustomScanMode.idCard ? state.idSide : null,
+      );
+
+      final List<ScanPageDraft> nextPages = List<ScanPageDraft>.from(state.pages);
+      if (state.mode == CustomScanMode.idCard) {
+        nextPages.removeWhere((ScanPageDraft p) => p.idSide == state.idSide);
+        nextPages.add(draft);
+      } else {
+        nextPages.add(draft);
+      }
+
+      final int activeIndex = nextPages.length - 1;
+
       state = state.copyWith(
         step: CustomScanStep.enhance,
+        pages: nextPages,
+        currentPageIndex: activeIndex,
         rawWarpedPath: rawWarped,
         warpedPath: enhanced,
-        selectedFilter: ScanFilter.color,
+        selectedFilter: ScanFilter.magicEnhance,
         clearRotation: true,
         busy: false,
         clearBusyMessage: true,
-      );
-    } catch (error) {
-      state = state.copyWith(busy: false, clearBusyMessage: true, error: error);
-    }
-  }
-
-  Future<void> confirmEnhance() async {
-    final String? imagePath = state.warpedPath;
-    if (imagePath == null) return;
-
-    state = state.copyWith(busy: true, clearError: true);
-
-    String finalPath = imagePath;
-    try {
-      if (state.rotationTurns != 0) {
-        final int angle = (state.rotationTurns * 90) % 360;
-        finalPath = await ref.read(scanEnhanceServiceProvider).rotateImage(
-              imagePath: imagePath,
-              angle: angle,
-            );
-      }
-
-      final List<ScanPageDraft> next = List<ScanPageDraft>.from(state.pages);
-      if (state.mode == CustomScanMode.idCard) {
-        next.removeWhere((ScanPageDraft p) => p.idSide == state.idSide);
-        next.add(ScanPageDraft(imagePath: finalPath, filter: state.selectedFilter, idSide: state.idSide));
-      } else {
-        next.add(ScanPageDraft(imagePath: finalPath, filter: state.selectedFilter));
-      }
-
-      IdScanSide nextSide = state.idSide;
-      if (state.mode == CustomScanMode.idCard && state.idSide == IdScanSide.front) {
-        nextSide = IdScanSide.back;
-      }
-
-      state = state.copyWith(
-        step: CustomScanStep.pages,
-        pages: next,
-        idSide: nextSide,
-        busy: false,
-        clearBusyMessage: true,
-        clearPending: true,
-        clearWarped: true,
-        clearRotation: true,
       );
     } catch (error) {
       state = state.copyWith(busy: false, clearBusyMessage: true, error: error);
@@ -246,12 +295,29 @@ class CustomScanNotifier extends _$CustomScanNotifier {
   void removePage(int index) {
     if (index < 0 || index >= state.pages.length) return;
     final List<ScanPageDraft> next = List<ScanPageDraft>.from(state.pages)..removeAt(index);
-    state = state.copyWith(pages: next, clearError: true);
+    if (next.isEmpty) {
+      state = state.copyWith(pages: const <ScanPageDraft>[]);
+      goToCapture();
+      return;
+    }
+    final int nextIndex = index.clamp(0, next.length - 1);
+    final ScanPageDraft active = next[nextIndex];
+    state = state.copyWith(
+      pages: next,
+      currentPageIndex: nextIndex,
+      warpedPath: active.imagePath,
+      rawWarpedPath: active.rawPath ?? active.imagePath,
+      selectedFilter: active.filter,
+      rotationTurns: active.rotationTurns,
+      clearError: true,
+    );
   }
 
   Future<void> save() async {
     if (!state.canSave) {
-      state = state.copyWith(error: const ScannerException('Add at least one page before saving.'));
+      state = state.copyWith(
+        error: const ScannerException('Add at least one page before saving.'),
+      );
       return;
     }
 
@@ -272,28 +338,55 @@ class CustomScanNotifier extends _$CustomScanNotifier {
   }
 
   Future<void> _saveDocument() async {
-    final List<String> paths = state.pages.map((ScanPageDraft p) => p.imagePath).toList();
+    final List<String> finalPaths = <String>[];
+    for (final ScanPageDraft page in state.pages) {
+      String path = page.imagePath;
+      if (page.rotationTurns != 0) {
+        final int angle = (page.rotationTurns * 90) % 360;
+        path = await ref.read(scanEnhanceServiceProvider).rotateImage(
+              imagePath: path,
+              angle: angle,
+            );
+      }
+      finalPaths.add(path);
+    }
+
+    final String title = state.documentTitle?.trim().isNotEmpty == true
+        ? state.documentTitle!.trim()
+        : _generateDefaultTitle();
+
     final String pdfPath = p.join(
       (await getTemporaryDirectory()).path,
-      FileNameUtils.withExtension(FileNameUtils.stamped('Document'), 'pdf'),
+      FileNameUtils.withExtension(title, 'pdf'),
     );
-    await ref.read(pdfServiceProvider).createDocumentPdfFromImages(imagePaths: paths, outputPath: pdfPath);
+    await ref.read(pdfServiceProvider).createDocumentPdfFromImages(
+          imagePaths: finalPaths,
+          outputPath: pdfPath,
+        );
     await ref.read(storageServiceProvider).persistScan(
           kind: DocumentKind.scan,
-          title: FileNameUtils.stamped('Document'),
-          tempImagePaths: paths,
+          title: title,
+          tempImagePaths: finalPaths,
           tempPdfPath: pdfPath,
         );
   }
 
   Future<void> _saveIdCard() async {
-    final String front = state.pages.firstWhere((ScanPageDraft p) => p.idSide == IdScanSide.front).imagePath;
-    final String back = state.pages.firstWhere((ScanPageDraft p) => p.idSide == IdScanSide.back).imagePath;
+    final String front = state.pages
+        .firstWhere((ScanPageDraft p) => p.idSide == IdScanSide.front)
+        .imagePath;
+    final String back = state.pages
+        .firstWhere((ScanPageDraft p) => p.idSide == IdScanSide.back)
+        .imagePath;
     final String pdfPath = p.join(
       (await getTemporaryDirectory()).path,
       FileNameUtils.withExtension(FileNameUtils.stamped('id_card'), 'pdf'),
     );
-    await ref.read(pdfServiceProvider).createIdCardA4(frontImagePath: front, backImagePath: back, outputPath: pdfPath);
+    await ref.read(pdfServiceProvider).createIdCardA4(
+          frontImagePath: front,
+          backImagePath: back,
+          outputPath: pdfPath,
+        );
     await ref.read(storageServiceProvider).persistGeneratedPdf(
           kind: DocumentKind.idCard,
           title: FileNameUtils.stamped('ID Card'),

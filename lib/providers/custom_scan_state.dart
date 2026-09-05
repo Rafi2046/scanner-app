@@ -11,6 +11,8 @@ class CustomScanState {
     this.mode = CustomScanMode.document,
     this.step = CustomScanStep.capture,
     this.pages = const <ScanPageDraft>[],
+    this.currentPageIndex = 0,
+    this.documentTitle,
     this.pendingPath,
     this.pendingQuad,
     this.warpedPath,
@@ -27,6 +29,8 @@ class CustomScanState {
   final CustomScanMode mode;
   final CustomScanStep step;
   final List<ScanPageDraft> pages;
+  final int currentPageIndex;
+  final String? documentTitle;
   final String? pendingPath;
   final ScanQuad? pendingQuad;
   final String? warpedPath;
@@ -40,7 +44,7 @@ class CustomScanState {
   final bool saved;
 
   bool get canSaveDocument =>
-      mode == CustomScanMode.document && pages.isNotEmpty;
+      mode == CustomScanMode.document && (pages.isNotEmpty || warpedPath != null);
 
   bool get canSaveIdCard {
     if (mode != CustomScanMode.idCard) {
@@ -59,6 +63,8 @@ class CustomScanState {
     CustomScanMode? mode,
     CustomScanStep? step,
     List<ScanPageDraft>? pages,
+    int? currentPageIndex,
+    String? documentTitle,
     String? pendingPath,
     ScanQuad? pendingQuad,
     String? warpedPath,
@@ -80,6 +86,8 @@ class CustomScanState {
       mode: mode ?? this.mode,
       step: step ?? this.step,
       pages: pages ?? this.pages,
+      currentPageIndex: currentPageIndex ?? this.currentPageIndex,
+      documentTitle: documentTitle ?? this.documentTitle,
       pendingPath: clearPending ? null : (pendingPath ?? this.pendingPath),
       pendingQuad: clearPending ? null : (pendingQuad ?? this.pendingQuad),
       warpedPath: clearWarped ? null : (warpedPath ?? this.warpedPath),

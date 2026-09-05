@@ -29,6 +29,12 @@ class EdgeDetectService {
       final DetectCornersResult result = await Isolate.run(
         () => detectCornersSync(imagePath),
       );
+      if (result.isDetected) {
+        return ScanQuad.fromFlat(result.flat);
+      }
+      if (liveQuad != null) {
+        return ScanQuad.fromNormalized(liveQuad, result.width, result.height);
+      }
       return ScanQuad.fromFlat(result.flat);
     } on AppException {
       rethrow;
