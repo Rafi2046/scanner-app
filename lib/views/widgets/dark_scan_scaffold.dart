@@ -10,12 +10,14 @@ class DarkScanScaffold extends StatelessWidget {
     required this.body,
     this.bottomBar,
     this.actions,
+    this.onBack,
   });
 
   final String title;
   final Widget body;
   final Widget? bottomBar;
   final List<Widget>? actions;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +28,10 @@ class DarkScanScaffold extends StatelessWidget {
         appBar: AppBar(
           backgroundColor: const Color(0xFF12141A),
           foregroundColor: Colors.white,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            onPressed: onBack ?? () => Navigator.of(context).maybePop(),
+          ),
           title: Text(
             title,
             style: const TextStyle(fontWeight: FontWeight.w700),

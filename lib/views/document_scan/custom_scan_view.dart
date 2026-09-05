@@ -74,12 +74,32 @@ class _CustomScanViewState extends ConsumerState<CustomScanView> {
       CustomScanStep.pages => 'Pages',
     };
 
+    void handleBack() {
+      final notifier = ref.read(customScanNotifierProvider.notifier);
+      switch (scan.step) {
+        case CustomScanStep.capture:
+          Navigator.of(context).maybePop();
+        case CustomScanStep.crop:
+          notifier.goToCapture();
+        case CustomScanStep.enhance:
+          notifier.goToCrop();
+        case CustomScanStep.pages:
+          notifier.goToCapture();
+      }
+    }
+
+    final bool isAtRoot = scan.step == CustomScanStep.capture;
+
     return PopScope(
-      canPop: !scan.busy,
+      canPop: isAtRoot && !scan.busy,
       onPopInvokedWithResult: (bool didPop, _) async {
         if (didPop) {
           await ref.read(cameraCaptureServiceProvider).dispose();
           ref.read(customScanNotifierProvider.notifier).resetSession();
+          return;
+        }
+        if (!scan.busy) {
+          handleBack();
         }
       },
       child: LoadingOverlay(
@@ -94,6 +114,7 @@ class _CustomScanViewState extends ConsumerState<CustomScanView> {
                 ? const EnhanceStepView()
                 : DarkScanScaffold(
                     title: title,
+                    onBack: handleBack,
                     body: switch (scan.step) {
                       CustomScanStep.capture => const SizedBox.shrink(),
                       CustomScanStep.crop => const CropStepView(),
