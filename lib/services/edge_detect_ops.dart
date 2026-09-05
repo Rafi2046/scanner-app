@@ -8,8 +8,8 @@ typedef DetectCornersResult = ({int width, int height, List<double> flat});
 typedef WarpArgs = ({String path, List<double> flat, String outputPath});
 
 /// Sync OpenCV paper edge detection — run only inside [Isolate.run].
-/// Uses text-erasure morphological closing, Otsu paper-mask segmentation,
-/// and oriented rectangular quad fitting to accurately detect real paper sheets.
+/// Uses text-erasure morphological closing, multi-channel segmentation (Otsu + Canny),
+/// and smart document scoring (centrality, contrast, aspect ratio, border rejection).
 DetectCornersResult detectCornersSync(String path) {
   final cv.Mat src = cv.imread(path);
   if (src.isEmpty) {
@@ -20,14 +20,12 @@ DetectCornersResult detectCornersSync(String path) {
   cv.Mat? gray;
   cv.Mat? textErased;
   cv.Mat? blurred;
+
   try {
     final int origW = src.cols;
     final int origH = src.rows;
 
-    // Rescale to ~600px max dimension:
-    // 1. Text characters become 1-2px and easily erased by morphology
-    // 2. High performance (<15ms)
-    // 3. Desk texture noise is suppressed
+    // Rescale to ~600px max dimension for fast, noise-free morphology
     final double maxDim = math.max(origW, origH).toDouble();
     final double scale = maxDim > 600 ? 600.0 / maxDim : 1.0;
 
@@ -47,22 +45,23 @@ DetectCornersResult detectCornersSync(String path) {
 
     gray = cv.cvtColor(workImg, cv.COLOR_BGR2GRAY);
 
-    // CRITICAL: Text-erasure via grayscale morphological closing.
-    // Dark printed text strokes (<15px) are replaced with the surrounding white/cream paper.
-    // The entire page becomes a solid paper surface with NO interior text edges!
-    final cv.Mat kernelText = cv.getStructuringElement(cv.MORPH_RECT, (17, 17));
+    // 1. Text-erasure via morphological closing (9x9 preserves crisp paper corners)
+    final cv.Mat kernelText = cv.getStructuringElement(cv.MORPH_RECT, (9, 9));
     textErased = cv.morphologyEx(gray, cv.MORPH_CLOSE, kernelText);
     kernelText.dispose();
 
-    blurred = cv.gaussianBlur(textErased, (9, 9), 2.0);
+    blurred = cv.gaussianBlur(textErased, (5, 5), 1.5);
 
+    // 2. Multi-strategy edge maps
     final List<cv.Mat> edgeMaps = <cv.Mat>[
       _buildOtsuPaperMask(blurred),
       _buildCannyPaperEdges(blurred),
+      _buildInvertedOtsuPaperMask(blurred),
     ];
 
     final List<double>? bestSmallFlat = _findBestPaperQuad(
       edgeMaps,
+      gray: gray,
       imageArea: imageArea,
       width: width,
       height: height,
@@ -80,11 +79,11 @@ DetectCornersResult detectCornersSync(String path) {
       return (width: origW, height: origH, flat: scaledQuad.toFlat());
     }
 
-    // High-margin fallback: only 2% inset when paper covers full frame (never chops text)
+    // High-margin fallback: 3% inset when paper covers full frame
     final ScanQuad fallback = ScanQuad.insetRect(
       width: origW,
       height: origH,
-      insetFraction: 0.02,
+      insetFraction: 0.03,
     );
     return (width: origW, height: origH, flat: fallback.toFlat());
   } finally {
@@ -96,48 +95,54 @@ DetectCornersResult detectCornersSync(String path) {
   }
 }
 
-/// Otsu thresholding on text-erased image creates a solid white polygon of the paper.
+/// Otsu thresholding segments bright paper on dark/medium backgrounds.
 cv.Mat _buildOtsuPaperMask(cv.Mat blur) {
   final (double _, cv.Mat thresh) = cv.threshold(blur, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
-  final cv.Mat kernelClose = cv.getStructuringElement(cv.MORPH_RECT, (21, 21));
-  final cv.Mat closed = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernelClose);
-  final cv.Mat kernelOpen = cv.getStructuringElement(cv.MORPH_RECT, (5, 5));
-  final cv.Mat opened = cv.morphologyEx(closed, cv.MORPH_OPEN, kernelOpen);
-
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (7, 7));
+  final cv.Mat closed = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel);
   thresh.dispose();
-  kernelClose.dispose();
-  closed.dispose();
-  kernelOpen.dispose();
-  return opened;
-}
-
-/// Canny edge detection on text-erased image detects ONLY paper outer boundaries.
-cv.Mat _buildCannyPaperEdges(cv.Mat blur) {
-  final cv.Mat edges = cv.canny(blur, 25, 80);
-  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (11, 11));
-  final cv.Mat closed = cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel);
-  edges.dispose();
   kernel.dispose();
   return closed;
 }
 
+/// Inverted Otsu segments dark documents or covers on bright desks.
+cv.Mat _buildInvertedOtsuPaperMask(cv.Mat blur) {
+  final (double _, cv.Mat thresh) = cv.threshold(blur, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (7, 7));
+  final cv.Mat closed = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel);
+  thresh.dispose();
+  kernel.dispose();
+  return closed;
+}
+
+/// Canny edge detection with dilation bridges perimeter discontinuities.
+cv.Mat _buildCannyPaperEdges(cv.Mat blur) {
+  final cv.Mat edges = cv.canny(blur, 25, 80);
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3));
+  final cv.Mat dilated = cv.dilate(edges, kernel);
+  edges.dispose();
+  kernel.dispose();
+  return dilated;
+}
+
 List<double>? _findBestPaperQuad(
   List<cv.Mat> edgeMaps, {
+  required cv.Mat gray,
   required double imageArea,
   required int width,
   required int height,
 }) {
   List<Offset>? bestQuad;
-  double bestScore = -1;
+  double bestScore = -1.0;
 
-  final double minArea = imageArea * 0.12;
-  final double maxArea = imageArea * 0.98;
+  final double minArea = imageArea * 0.08;
+  final double maxArea = imageArea * 0.95;
 
-  try {
-    for (final cv.Mat map in edgeMaps) {
+  for (final cv.Mat map in edgeMaps) {
+    try {
       final (cv.Contours contours, cv.VecVec4i hierarchy) = cv.findContours(
         map,
-        cv.RETR_EXTERNAL,
+        cv.RETR_LIST, // Crucial: RETR_LIST catches document borders inside frame boundaries
         cv.CHAIN_APPROX_SIMPLE,
       );
       hierarchy.dispose();
@@ -152,89 +157,149 @@ List<double>? _findBestPaperQuad(
         final double peri = cv.arcLength(contour, true);
         if (peri < 60) continue;
 
-        // Generate candidate quads from this contour:
-        final List<List<Offset>> candidates = <List<Offset>>[];
-
-        // 1. Polygon approximations with various tolerances
-        for (final double eps in <double>[0.02, 0.035, 0.05, 0.07, 0.09]) {
+        // Try multiple approximation tolerances for crisp or slightly curved paper edges
+        for (final double eps in <double>[0.015, 0.025, 0.035, 0.05, 0.075, 0.10]) {
           final cv.VecPoint approx = cv.approxPolyDP(contour, eps * peri, true);
+          List<Offset>? candidatePts;
+
           if (approx.length == 4 && cv.isContourConvex(approx)) {
-            candidates.add(orderQuadPoints(<Offset>[
+            candidatePts = <Offset>[
               for (int k = 0; k < 4; k++)
                 Offset(approx[k].x.toDouble(), approx[k].y.toDouble()),
-            ]));
+            ];
+          } else if (approx.length >= 5 && approx.length <= 8) {
+            candidatePts = _extractFourCornersFromPoly(approx);
           }
           approx.dispose();
-        }
 
-        // 2. Minimum area bounding rotated rectangle (ideal for curved book pages)
-        final cv.RotatedRect rRect = cv.minAreaRect(contour);
-        final cv.VecPoint2f rPts = rRect.points;
-        if (rPts.length == 4) {
-          candidates.add(orderQuadPoints(<Offset>[
-            for (int k = 0; k < 4; k++)
-              Offset(rPts[k].x.toDouble(), rPts[k].y.toDouble()),
-          ]));
-        }
+          if (candidatePts == null || candidatePts.length != 4) {
+            continue;
+          }
 
-        // 3. Extreme corners
-        final List<Offset> extPts = _extractFourCorners(contour);
-        if (extPts.length == 4) {
-          candidates.add(extPts);
-        }
-
-        // Score each candidate quad
-        for (final List<Offset> candidate in candidates) {
-          final double qArea = _polygonArea(candidate);
-          if (qArea < minArea || qArea > maxArea) continue;
-
-          // Check rectangularity (interior corner angles close to 90°)
-          final double angleQuality = _evaluateRectangularity(candidate);
-          if (angleQuality < 0.40) continue; // Skip non-quadrilaterals or severe skews
-
-          // Check aspect ratio (typical books and documents: 0.4 to 2.4)
-          final double topLen = dist(candidate[0], candidate[1]);
-          final double leftLen = dist(candidate[0], candidate[3]);
-          if (topLen < 20 || leftLen < 20) continue;
-          final double aspect = topLen / leftLen;
-          if (aspect < 0.35 || aspect > 2.6) continue;
-
-          // Score: combines area coverage and rectangularity
-          final double areaRatio = qArea / imageArea;
-          final double score = (areaRatio * 60.0) + (angleQuality * 40.0);
+          final double score = _scoreCandidateQuad(
+            candidatePts,
+            gray: gray,
+            width: width,
+            height: height,
+            imageArea: imageArea,
+          );
 
           if (score > bestScore) {
             bestScore = score;
-            bestQuad = candidate;
+            bestQuad = candidatePts;
           }
         }
       }
       contours.dispose();
+    } catch (_) {
+      // Continue to next map
+    } finally {
       map.dispose();
     }
-
-    if (bestQuad == null) {
-      return null;
-    }
-
-    // Clamp candidate points within image bounds
-    final List<Offset> clamped = <Offset>[
-      for (final Offset pt in bestQuad)
-        Offset(
-          pt.dx.clamp(0.0, width.toDouble()),
-          pt.dy.clamp(0.0, height.toDouble()),
-        ),
-    ];
-
-    return ScanQuad(
-      topLeft: clamped[0],
-      topRight: clamped[1],
-      bottomRight: clamped[2],
-      bottomLeft: clamped[3],
-    ).toFlat();
-  } finally {
-    // Done
   }
+
+  if (bestQuad == null) {
+    return null;
+  }
+
+  // Ensure clockwise ordered points clamped to bounds
+  final List<Offset> ordered = orderQuadPoints(bestQuad);
+  final List<Offset> clamped = <Offset>[
+    for (final Offset pt in ordered)
+      Offset(
+        pt.dx.clamp(0.0, width.toDouble()),
+        pt.dy.clamp(0.0, height.toDouble()),
+      ),
+  ];
+
+  return ScanQuad(
+    topLeft: clamped[0],
+    topRight: clamped[1],
+    bottomRight: clamped[2],
+    bottomLeft: clamped[3],
+  ).toFlat();
+}
+
+/// Evaluates candidate quad: rewards documents centered on desks, penalizes camera border touches.
+double _scoreCandidateQuad(
+  List<Offset> pts, {
+  required cv.Mat gray,
+  required int width,
+  required int height,
+  required double imageArea,
+}) {
+  final List<Offset> ord = orderQuadPoints(pts);
+
+  final double qArea = _polygonArea(ord);
+  final double areaRatio = qArea / imageArea;
+  if (areaRatio < 0.08 || areaRatio > 0.95) return -1.0;
+
+  // 1. Strict Border Check: Real paper on a desk does NOT touch 3 or 4 camera frame edges!
+  int borderTouches = 0;
+  const double margin = 8.0;
+  for (final Offset pt in ord) {
+    if (pt.dx <= margin || pt.dx >= width - margin || pt.dy <= margin || pt.dy >= height - margin) {
+      borderTouches++;
+    }
+  }
+  if (borderTouches >= 3) {
+    return -1.0; // This is the camera frame, not the document
+  }
+  final double borderPenalty = (1.0 - borderTouches * 0.25).clamp(0.2, 1.0);
+
+  // 2. Rectangularity: Corners should be close to 90 degrees
+  final double rectangularity = _evaluateRectangularity(ord);
+  if (rectangularity < 0.45) return -1.0;
+
+  // 3. Aspect Ratio: Standard books and documents (0.40 to 2.5)
+  final double topW = dist(ord[0], ord[1]);
+  final double botW = dist(ord[3], ord[2]);
+  final double leftH = dist(ord[0], ord[3]);
+  final double rightH = dist(ord[1], ord[2]);
+  final double avgW = (topW + botW) / 2.0;
+  final double avgH = (leftH + rightH) / 2.0;
+  if (avgW <= 12 || avgH <= 12) return -1.0;
+
+  final double aspect = avgW / avgH;
+  if (aspect < 0.35 || aspect > 2.8) return -1.0;
+
+  double aspectScore = 1.0;
+  if (aspect >= 0.48 && aspect <= 0.85) {
+    aspectScore = 2.2; // Standard single portrait page (A4, book, document)
+  } else if (aspect > 0.85 && aspect <= 1.25) {
+    aspectScore = 1.6; // Square document
+  } else if (aspect > 1.25 && aspect <= 1.85) {
+    aspectScore = 1.8; // Landscape spread
+  }
+
+  // 4. Centrality: Documents are positioned near the center of the camera
+  final double cx = (ord[0].dx + ord[1].dx + ord[2].dx + ord[3].dx) / (4.0 * width);
+  final double cy = (ord[0].dy + ord[1].dy + ord[2].dy + ord[3].dy) / (4.0 * height);
+  final double distCenter = math.sqrt((cx - 0.5) * (cx - 0.5) + (cy - 0.5) * (cy - 0.5));
+  final double centrality = (1.0 - distCenter * 1.6).clamp(0.2, 1.0);
+
+  // 5. Area Fitness: Prefers documents occupying 25% to 75% of the frame (like books on desks)
+  final double areaFitness = 1.0 - (areaRatio - 0.50).abs() * 0.7;
+
+  // 6. Contrast Boost: Sample center luminance vs overall average
+  double contrastBoost = 1.0;
+  final int midX = (cx * width).round().clamp(0, width - 1);
+  final int midY = (cy * height).round().clamp(0, height - 1);
+  try {
+    final int centerVal = gray.at<num>(midY, midX).toInt();
+    if (centerVal > 140) {
+      contrastBoost = 1.25; // Confirmed bright paper
+    }
+  } catch (_) {}
+
+  final double totalScore = ((rectangularity * 35.0) +
+          (aspectScore * 25.0) +
+          (centrality * 20.0) +
+          (areaFitness * 20.0)) *
+      borderPenalty *
+      contrastBoost;
+
+  return totalScore;
 }
 
 /// Evaluates how close the quad's 4 corners are to 90 degrees (1.0 = perfect rectangle).
@@ -256,9 +321,7 @@ double _evaluateRectangularity(List<Offset> pts) {
     final double l2 = math.sqrt(v2x * v2x + v2y * v2y);
     if (l1 <= 0 || l2 <= 0) return 0.0;
 
-    // Dot product of normalized vectors
     final double cosAngle = ((v1x * v2x) + (v1y * v2y)) / (l1 * l2);
-    // Ideal is cosAngle == 0 (90 degrees)
     final double deviation = cosAngle.abs();
     totalQuality += (1.0 - deviation.clamp(0.0, 1.0));
   }
@@ -266,9 +329,10 @@ double _evaluateRectangularity(List<Offset> pts) {
   return totalQuality / 4.0;
 }
 
-/// Extracts the 4 corners of any contour by finding extreme points.
-List<Offset> _extractFourCorners(cv.VecPoint pts) {
-  if (pts.length < 4) return <Offset>[];
+/// Extracts 4 extreme corners from a small polygon approximation (5 to 8 points).
+List<Offset> _extractFourCornersFromPoly(cv.VecPoint pts) {
+  final int count = pts.length;
+  if (count < 4) return <Offset>[];
 
   double minSum = double.infinity;
   double maxSum = -double.infinity;
@@ -280,11 +344,11 @@ List<Offset> _extractFourCorners(cv.VecPoint pts) {
   Offset tr = Offset.zero;
   Offset bl = Offset.zero;
 
-  for (int i = 0; i < pts.length; i++) {
+  for (int i = 0; i < count; i++) {
     final double x = pts[i].x.toDouble();
     final double y = pts[i].y.toDouble();
     final double sum = x + y;
-    final double diff = x - y;
+    final double diff = y - x;
 
     if (sum < minSum) {
       minSum = sum;
@@ -294,12 +358,12 @@ List<Offset> _extractFourCorners(cv.VecPoint pts) {
       maxSum = sum;
       br = Offset(x, y);
     }
-    if (diff > maxDiff) {
-      maxDiff = diff;
-      tr = Offset(x, y);
-    }
     if (diff < minDiff) {
       minDiff = diff;
+      tr = Offset(x, y);
+    }
+    if (diff > maxDiff) {
+      maxDiff = diff;
       bl = Offset(x, y);
     }
   }

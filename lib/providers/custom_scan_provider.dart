@@ -20,16 +20,32 @@ part 'custom_scan_provider.g.dart';
 
 @riverpod
 class CustomScanNotifier extends _$CustomScanNotifier {
+  final Map<ScanFilter, String> _filterCache = <ScanFilter, String>{};
+
   @override
   CustomScanState build() => const CustomScanState();
 
   void startSession(CustomScanMode mode) {
+    _filterCache.clear();
     state = CustomScanState(mode: mode, idSide: IdScanSide.front);
   }
 
-  void resetSession() => state = const CustomScanState();
+  void resetSession() {
+    _filterCache.clear();
+    state = const CustomScanState();
+  }
 
   Future<void> selectFilter(ScanFilter filter) async {
+    // Instant switch if filter is already computed and cached
+    if (_filterCache.containsKey(filter)) {
+      state = state.copyWith(
+        selectedFilter: filter,
+        warpedPath: _filterCache[filter],
+        clearError: true,
+      );
+      return;
+    }
+
     final String? raw = state.rawWarpedPath ?? state.warpedPath;
     if (raw == null) {
       state = state.copyWith(selectedFilter: filter, clearError: true);
@@ -44,6 +60,7 @@ class CustomScanNotifier extends _$CustomScanNotifier {
             imagePath: raw,
             filter: filter,
           );
+      _filterCache[filter] = processed;
       state = state.copyWith(
         warpedPath: processed,
         selectedFilter: filter,
@@ -124,6 +141,9 @@ class CustomScanNotifier extends _$CustomScanNotifier {
             imagePath: rotatedRaw,
             filter: state.selectedFilter,
           );
+      _filterCache.clear();
+      _filterCache[ScanFilter.original] = rotatedRaw;
+      _filterCache[state.selectedFilter] = rotatedFiltered;
       state = state.copyWith(
         rawWarpedPath: rotatedRaw,
         warpedPath: rotatedFiltered,
@@ -175,6 +195,9 @@ class CustomScanNotifier extends _$CustomScanNotifier {
             imagePath: rawWarped,
             filter: ScanFilter.color,
           );
+      _filterCache.clear();
+      _filterCache[ScanFilter.original] = rawWarped;
+      _filterCache[ScanFilter.color] = enhanced;
       state = state.copyWith(
         step: CustomScanStep.enhance,
         rawWarpedPath: rawWarped,

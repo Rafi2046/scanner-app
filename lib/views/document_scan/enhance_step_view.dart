@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scanner_app/core/constants/app_constants.dart';
@@ -24,8 +22,16 @@ class EnhanceStepView extends ConsumerStatefulWidget {
 
 class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
   static const Color _accent = Color(0xFF00D2A0);
+  int _scanTrigger = 1;
   String? _previousPath;
-  String? _currentPath;
+
+  void _onFilterSelected(ScanFilter filter) {
+    setState(() {
+      _scanTrigger++;
+      _previousPath = ref.read(customScanNotifierProvider).warpedPath;
+    });
+    ref.read(customScanNotifierProvider.notifier).selectFilter(filter);
+  }
 
   Future<void> _onAddPage() async {
     await ref.read(customScanNotifierProvider.notifier).confirmEnhance();
@@ -92,15 +98,6 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
           style: TextStyle(color: Colors.white70),
         ),
       );
-    }
-
-    // Keep track of previous and current image paths for animated scan reveal
-    if (_currentPath == null) {
-      _currentPath = path;
-      _previousPath = scan.rawWarpedPath ?? path;
-    } else if (path != _currentPath) {
-      _previousPath = _currentPath;
-      _currentPath = path;
     }
 
     final int currentPage = scan.pages.length + 1;
@@ -174,21 +171,10 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(AppConstants.radiusSm),
                         child: DocumentScanBeam(
-                          autoStart: true,
-                          trigger: scan.selectedFilter,
-                          duration: const Duration(milliseconds: 700),
-                          previousChild: _previousPath != null && _previousPath != path
-                              ? Image.file(
-                                  File(_previousPath!),
-                                  key: ValueKey<String>('prev_$_previousPath'),
-                                  fit: BoxFit.contain,
-                                )
-                              : null,
-                          child: Image.file(
-                            File(path),
-                            key: ValueKey<String>('curr_$path'),
-                            fit: BoxFit.contain,
-                          ),
+                          trigger: _scanTrigger,
+                          imagePath: path,
+                          previousImagePath: _previousPath ?? scan.rawWarpedPath,
+                          duration: const Duration(milliseconds: 1350),
                         ),
                       ),
                     ),
@@ -272,7 +258,7 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
               selected: scan.selectedFilter,
               onSelected: (ScanFilter filter) {
                 if (scan.busy) return;
-                ref.read(customScanNotifierProvider.notifier).selectFilter(filter);
+                _onFilterSelected(filter);
               },
             ),
 

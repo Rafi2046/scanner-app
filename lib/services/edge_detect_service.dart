@@ -32,7 +32,9 @@ class EdgeDetectService {
       return ScanQuad.fromFlat(result.flat);
     } on AppException {
       rethrow;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      // ignore: avoid_print
+      print('🚨 OpenCV detectCorners failed: $error\n$stackTrace');
       if (liveQuad != null) {
         try {
           final Uint8List bytes = await File(imagePath).readAsBytes();
