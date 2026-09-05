@@ -24,6 +24,8 @@ class EnhanceStepView extends ConsumerStatefulWidget {
 
 class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
   static const Color _accent = Color(0xFF00D2A0);
+  String? _previousPath;
+  String? _currentPath;
 
   Future<void> _onAddPage() async {
     await ref.read(customScanNotifierProvider.notifier).confirmEnhance();
@@ -90,6 +92,15 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
           style: TextStyle(color: Colors.white70),
         ),
       );
+    }
+
+    // Keep track of previous and current image paths for animated scan reveal
+    if (_currentPath == null) {
+      _currentPath = path;
+      _previousPath = scan.rawWarpedPath ?? path;
+    } else if (path != _currentPath) {
+      _previousPath = _currentPath;
+      _currentPath = path;
     }
 
     final int currentPage = scan.pages.length + 1;
@@ -165,9 +176,17 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                         child: DocumentScanBeam(
                           autoStart: true,
                           trigger: scan.selectedFilter,
+                          duration: const Duration(milliseconds: 700),
+                          previousChild: _previousPath != null && _previousPath != path
+                              ? Image.file(
+                                  File(_previousPath!),
+                                  key: ValueKey<String>('prev_$_previousPath'),
+                                  fit: BoxFit.contain,
+                                )
+                              : null,
                           child: Image.file(
                             File(path),
-                            key: ValueKey<String>(path),
+                            key: ValueKey<String>('curr_$path'),
                             fit: BoxFit.contain,
                           ),
                         ),

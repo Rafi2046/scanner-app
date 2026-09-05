@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-/// Sweeping laser beam scan animation for the cropped document.
+/// Sweeping laser beam scan animation with real-time top-down reveal effect.
+/// As the glowing laser moves from top to bottom, the new filtered document is revealed.
 class DocumentScanBeam extends StatefulWidget {
   const DocumentScanBeam({
     super.key,
     required this.child,
+    this.previousChild,
     this.autoStart = true,
     this.onCompleted,
     this.trigger,
+    this.duration = const Duration(milliseconds: 700),
   });
 
   final Widget child;
+  final Widget? previousChild;
   final bool autoStart;
   final VoidCallback? onCompleted;
   final Object? trigger;
+  final Duration duration;
 
   @override
   State<DocumentScanBeam> createState() => _DocumentScanBeamState();
@@ -31,13 +37,13 @@ class _DocumentScanBeamState extends State<DocumentScanBeam>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: widget.duration,
     );
 
     _progressAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.85, curve: Curves.easeInOutCubic),
+        curve: const Interval(0.0, 0.90, curve: Curves.easeInOutCubic),
       ),
     );
 
@@ -62,6 +68,7 @@ class _DocumentScanBeamState extends State<DocumentScanBeam>
 
   void _startScan() {
     _active = true;
+    HapticFeedback.lightImpact();
     _controller.forward(from: 0.0);
   }
 
@@ -81,27 +88,60 @@ class _DocumentScanBeamState extends State<DocumentScanBeam>
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.passthrough,
-      children: <Widget>[
-        widget.child,
-        if (_active)
-          Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (BuildContext context, _) {
-                return CustomPaint(
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (BuildContext context, _) {
+        final double progress = _progressAnim.value;
+        final double opacity = _fadeAnim.value;
+
+        return Stack(
+          fit: StackFit.passthrough,
+          children: <Widget>[
+            // 1. Previous document image on bottom during transition
+            if (_active && widget.previousChild != null)
+              widget.previousChild!
+            else
+              const SizedBox.shrink(),
+
+            // 2. New filtered document revealed from top to bottom behind the laser
+            if (_active && widget.previousChild != null)
+              ClipRect(
+                clipper: _TopDownRevealClipper(progress),
+                child: widget.child,
+              )
+            else
+              widget.child,
+
+            // 3. Sweeping neon laser beam with light wash
+            if (_active)
+              Positioned.fill(
+                child: CustomPaint(
                   painter: _LaserBeamPainter(
-                    progress: _progressAnim.value,
-                    opacity: _fadeAnim.value,
+                    progress: progress,
+                    opacity: opacity,
                   ),
-                );
-              },
-            ),
-          ),
-      ],
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
+}
+
+class _TopDownRevealClipper extends CustomClipper<Rect> {
+  _TopDownRevealClipper(this.progress);
+
+  final double progress;
+
+  @override
+  Rect getClip(Size size) {
+    return Rect.fromLTRB(0, 0, size.width, size.height * progress);
+  }
+
+  @override
+  bool shouldReclip(covariant _TopDownRevealClipper oldClipper) =>
+      oldClipper.progress != progress;
 }
 
 class _LaserBeamPainter extends CustomPainter {
@@ -111,17 +151,17 @@ class _LaserBeamPainter extends CustomPainter {
   final double opacity;
 
   static const Color mint = Color(0xFF00D2A0);
-  static const Color brightMint = Color(0xFFC7FFF0);
+  static const Color brightMint = Color(0xFFE0FFF7);
 
   @override
   void paint(Canvas canvas, Size size) {
     if (opacity <= 0) return;
 
     final double y = size.height * progress;
-    const double beamHeight = 65.0;
+    const double beamHeight = 70.0;
     final double topY = (y - beamHeight).clamp(0.0, size.height);
 
-    // 1. Trailing gradient light wash behind the laser
+    // 1. Trailing gradient light wash behind the laser head
     final Rect trailRect = Rect.fromLTRB(0, topY, size.width, y);
     if (trailRect.height > 0) {
       final Paint trailPaint = Paint()
@@ -130,8 +170,8 @@ class _LaserBeamPainter extends CustomPainter {
           end: Alignment.bottomCenter,
           colors: <Color>[
             mint.withValues(alpha: 0.0),
-            mint.withValues(alpha: 0.08 * opacity),
-            mint.withValues(alpha: 0.28 * opacity),
+            mint.withValues(alpha: 0.10 * opacity),
+            mint.withValues(alpha: 0.35 * opacity),
           ],
         ).createShader(trailRect);
       canvas.drawRect(trailRect, trailPaint);
@@ -139,29 +179,29 @@ class _LaserBeamPainter extends CustomPainter {
 
     // 2. Soft outer glow around the laser line
     final Paint glowPaint = Paint()
-      ..color = mint.withValues(alpha: 0.45 * opacity)
-      ..strokeWidth = 6.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+      ..color = mint.withValues(alpha: 0.50 * opacity)
+      ..strokeWidth = 7.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0);
     canvas.drawLine(Offset(0, y), Offset(size.width, y), glowPaint);
 
     // 3. Crisp main laser line
     final Paint linePaint = Paint()
       ..color = mint.withValues(alpha: 0.95 * opacity)
-      ..strokeWidth = 2.5;
+      ..strokeWidth = 3.0;
     canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
 
-    // 4. Ultra-bright laser core
+    // 4. Ultra-bright glowing laser core
     final Paint corePaint = Paint()
-      ..color = brightMint.withValues(alpha: 0.90 * opacity)
-      ..strokeWidth = 1.0;
+      ..color = brightMint.withValues(alpha: 0.95 * opacity)
+      ..strokeWidth = 1.4;
     canvas.drawLine(Offset(0, y), Offset(size.width, y), corePaint);
 
-    // 5. Left & right glowing emitter points
+    // 5. Left & right emitter dots
     final Paint dotPaint = Paint()
       ..color = brightMint.withValues(alpha: 0.95 * opacity)
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(4, y), 3.0, dotPaint);
-    canvas.drawCircle(Offset(size.width - 4, y), 3.0, dotPaint);
+    canvas.drawCircle(Offset(4, y), 3.5, dotPaint);
+    canvas.drawCircle(Offset(size.width - 4, y), 3.5, dotPaint);
   }
 
   @override
