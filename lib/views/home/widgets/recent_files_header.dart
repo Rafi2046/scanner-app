@@ -37,12 +37,16 @@ class RecentFilesHeader extends StatelessWidget {
             ),
           ),
         if (onSeeAll != null)
-          IconButton(
-            onPressed: onSeeAll,
-            icon: const Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 16,
-              color: AppTheme.primary,
+          GestureDetector(
+            onTap: onSeeAll,
+            behavior: HitTestBehavior.opaque,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 8, top: 4, bottom: 4),
+              child: Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: AppTheme.primary,
+              ),
             ),
           ),
       ],

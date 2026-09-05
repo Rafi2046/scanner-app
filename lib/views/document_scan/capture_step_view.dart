@@ -1,7 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:scanner_app/core/constants/app_constants.dart';
 import 'package:scanner_app/core/enums/custom_scan_mode.dart';
 import 'package:scanner_app/core/errors/app_exception.dart';
 import 'package:scanner_app/providers/custom_scan_provider.dart';

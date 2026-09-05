@@ -39,6 +39,12 @@ dependencies:
   # Utilities
   uuid: ^4.5.1
   intl: ^0.20.2
+  lucide_icons: ^0.257.0
+  camera: ^0.12.0+2
+  # 13.x pulls permission_handler_android 14.x (broken .kts on AGP 8 / non-built-in Kotlin).
+  permission_handler: 11.3.1
+  image_picker: ^1.2.3
+  opencv_dart: ^2.2.2
 
 dev_dependencies:
   flutter_test:
