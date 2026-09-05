@@ -465,100 +465,196 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
       body: SafeArea(
         child: Column(
           children: <Widget>[
-            // Sleek Top Bar: Compact Back Button + Center Title Chip + "+ Page" chip
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
+            // Ultra-Premium Top Navigation Bar
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F1217),
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    width: 0.8,
+                  ),
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
               child: Row(
                 children: <Widget>[
+                  // Left: Tactile Frosted Back Button
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: scan.busy ? null : _confirmDiscardScan,
-                      borderRadius: BorderRadius.circular(16),
+                      onTap: scan.busy
+                          ? null
+                          : () {
+                              HapticFeedback.lightImpact();
+                              _confirmDiscardScan();
+                            },
+                      borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        width: 32,
-                        height: 32,
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white10, width: 0.8),
+                          color: const Color(0xFF191D25),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.10),
+                            width: 0.8,
+                          ),
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: Colors.white70,
-                          size: 16,
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 15,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
 
-                  // Center: Document Title Chip
+                  // Center: Document Title Badge with Icon and Pencil
                   Expanded(
                     child: Center(
-                      child: GestureDetector(
-                        onTap: scan.busy ? null : () => _showRenameDialog(currentTitle),
-                        behavior: HitTestBehavior.opaque,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white10, width: 0.8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              Flexible(
-                                child: Text(
-                                  currentTitle,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: scan.busy
+                              ? null
+                              : () {
+                                  HapticFeedback.lightImpact();
+                                  _showRenameDialog(currentTitle);
+                                },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            height: 36,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: <Color>[
+                                  Color(0xFF1E232E),
+                                  Color(0xFF161920),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.10),
+                                width: 0.8,
+                              ),
+                              boxShadow: <BoxShadow>[
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.30),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(alpha: 0.15),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.description_outlined,
+                                    color: _accent,
+                                    size: 11.5,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Icon(
-                                Icons.edit_outlined,
-                                color: _accent,
-                                size: 12,
-                              ),
-                            ],
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    currentTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  width: 18,
+                                  height: 18,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.06),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.edit_rounded,
+                                    color: Colors.white60,
+                                    size: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
 
-                  // Right: "+ Page" compact chip
+                  // Right: Glowing CamScanner Accent "+ Page" Action Pill
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: scan.busy ? null : _showAddPageSheet,
-                      borderRadius: BorderRadius.circular(14),
+                      onTap: scan.busy
+                          ? null
+                          : () {
+                              HapticFeedback.lightImpact();
+                              _showAddPageSheet();
+                            },
+                      borderRadius: BorderRadius.circular(18),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                        height: 34,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(
-                          color: _accent.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: _accent.withValues(alpha: 0.35), width: 0.8),
+                          gradient: const LinearGradient(
+                            colors: <Color>[
+                              Color(0xFF00E5A3),
+                              Color(0xFF00B589),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(18),
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: _accent.withValues(alpha: 0.35),
+                              blurRadius: 10,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Icon(Icons.add_rounded, color: _accent, size: 14),
+                            Icon(
+                              Icons.add_rounded,
+                              color: Color(0xFF081C15),
+                              size: 16,
+                            ),
                             SizedBox(width: 3),
                             Text(
                               'Page',
                               style: TextStyle(
-                                color: _accent,
+                                color: Color(0xFF081C15),
                                 fontSize: 12,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.3,
                               ),
                             ),
                           ],
@@ -662,37 +758,63 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
               ),
             ),
 
-            // Compact Visual Filter Cards Carousel
-            ScanFilterVisualCarousel(
-              selected: activeFilter,
-              onSelected: (ScanFilter filter) {
-                if (scan.busy || isOnAddCard) return;
-                _onFilterSelected(filter);
-              },
-            ),
+            // Inactive grayed-out state when on "+ Add Page":
+            // Visibly disabled (grayscale + 32% opacity) so user immediately sees
+            // that filters and toolbar tools cannot be tapped on this empty sheet.
+            IgnorePointer(
+              ignoring: isOnAddCard,
+              child: AnimatedOpacity(
+                opacity: isOnAddCard ? 0.30 : 1.0,
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOut,
+                child: ColorFiltered(
+                  colorFilter: isOnAddCard
+                      ? const ColorFilter.matrix(<double>[
+                          0.2126, 0.7152, 0.0722, 0, 0, // Red to grayscale
+                          0.2126, 0.7152, 0.0722, 0, 0, // Green to grayscale
+                          0.2126, 0.7152, 0.0722, 0, 0, // Blue to grayscale
+                          0,      0,      0,      1, 0, // Alpha
+                        ])
+                      : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      // Compact Visual Filter Cards Carousel
+                      ScanFilterVisualCarousel(
+                        selected: activeFilter,
+                        onSelected: (ScanFilter filter) {
+                          if (scan.busy || isOnAddCard) return;
+                          _onFilterSelected(filter);
+                        },
+                      ),
 
-            const SizedBox(height: 4),
+                      const SizedBox(height: 4),
 
-            // Clean, non-bulky bottom action toolbar
-            ScanEnhanceBottomBar(
-              busy: scan.busy,
-              pageCount: totalPages,
-              onRetake: () {
-                ref.read(customScanNotifierProvider.notifier).goToCapture();
-              },
-              onRotateLeft: () {
-                ref.read(customScanNotifierProvider.notifier).rotateLeft();
-              },
-              onCrop: () {
-                ref.read(customScanNotifierProvider.notifier).goToCrop();
-              },
-              onExtractText: () {
-                _onExtractText(activePath, activeRotation);
-              },
-              onSign: _onSign,
-              onConfirm: () {
-                ref.read(customScanNotifierProvider.notifier).save();
-              },
+                      // Clean, non-bulky bottom action toolbar
+                      ScanEnhanceBottomBar(
+                        busy: scan.busy,
+                        pageCount: totalPages,
+                        onRetake: () {
+                          ref.read(customScanNotifierProvider.notifier).goToCapture();
+                        },
+                        onRotateLeft: () {
+                          ref.read(customScanNotifierProvider.notifier).rotateLeft();
+                        },
+                        onCrop: () {
+                          ref.read(customScanNotifierProvider.notifier).goToCrop();
+                        },
+                        onExtractText: () {
+                          _onExtractText(activePath, activeRotation);
+                        },
+                        onSign: _onSign,
+                        onConfirm: () {
+                          ref.read(customScanNotifierProvider.notifier).save();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
         ),
