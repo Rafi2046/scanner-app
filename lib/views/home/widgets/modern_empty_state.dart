@@ -9,11 +9,13 @@ class ModernEmptyState extends StatelessWidget {
     this.onScan,
     this.title = 'No documents yet',
     this.subtitle = 'Tap + to scan your first file.',
+    this.actionLabel = 'Scan document',
   });
 
   final VoidCallback? onScan;
   final String title;
   final String subtitle;
+  final String actionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +65,7 @@ class ModernEmptyState extends StatelessWidget {
             FilledButton.icon(
               onPressed: onScan,
               icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Scan document'),
+              label: Text(actionLabel),
             ),
           ],
         ],

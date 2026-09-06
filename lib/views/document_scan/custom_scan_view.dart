@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scanner_app/core/enums/custom_scan_mode.dart';
 import 'package:scanner_app/core/enums/custom_scan_step.dart';
+import 'package:scanner_app/core/enums/id_card_category.dart';
 import 'package:scanner_app/core/errors/app_exception.dart';
 import 'package:scanner_app/providers/custom_scan_provider.dart';
 import 'package:scanner_app/providers/custom_scan_state.dart';
@@ -18,9 +19,15 @@ class CustomScanView extends ConsumerStatefulWidget {
   const CustomScanView({
     super.key,
     required this.mode,
+    this.idCategory,
+    this.enterIdCamera = false,
   });
 
   final CustomScanMode mode;
+  final IdCardCategory? idCategory;
+
+  /// Skip the ID type picker and open the camera for [idCategory].
+  final bool enterIdCamera;
 
   @override
   ConsumerState<CustomScanView> createState() => _CustomScanViewState();
@@ -30,8 +37,16 @@ class _CustomScanViewState extends ConsumerState<CustomScanView> {
   @override
   void initState() {
     super.initState();
+    // After first frame so CaptureStepView can read the session on rebuild.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(customScanNotifierProvider.notifier).startSession(widget.mode);
+      if (!mounted) {
+        return;
+      }
+      ref.read(customScanNotifierProvider.notifier).startSession(
+            widget.mode,
+            idCategory: widget.idCategory,
+            enterIdCamera: widget.enterIdCamera,
+          );
     });
   }
 
@@ -67,8 +82,9 @@ class _CustomScanViewState extends ConsumerState<CustomScanView> {
 
     final CustomScanState scan = ref.watch(customScanNotifierProvider);
     final String title = switch (scan.step) {
-      CustomScanStep.capture =>
-        scan.mode == CustomScanMode.idCard ? 'Scan ID Card' : 'Scan Document',
+      CustomScanStep.capture => scan.mode == CustomScanMode.idCard
+          ? 'Scan ${scan.idCategory.title}'
+          : 'Scan Document',
       CustomScanStep.crop => 'Crop',
       CustomScanStep.enhance => 'Enhance',
       CustomScanStep.pages => 'Pages',

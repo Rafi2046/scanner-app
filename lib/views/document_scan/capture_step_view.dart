@@ -55,7 +55,9 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
         ? ScanTabMode.idCards
         : ScanTabMode.scan;
     if (scan.mode == CustomScanMode.idCard &&
-        (scan.idSide == IdScanSide.back || scan.pages.isNotEmpty)) {
+        (scan.skipIdTypePicker ||
+            scan.idSide == IdScanSide.back ||
+            scan.pages.isNotEmpty)) {
       _inIdCardCamera = true;
     }
     _initCamera();
@@ -158,9 +160,13 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
     final CustomScanState scan = ref.watch(customScanNotifierProvider);
     final bool isBackOrHasPages = scan.mode == CustomScanMode.idCard &&
         (scan.idSide == IdScanSide.back || scan.pages.isNotEmpty);
+    final bool inIdCamera =
+        _inIdCardCamera || scan.skipIdTypePicker || isBackOrHasPages;
 
-    // If user is on ID Cards tab and hasn't started the camera yet, show the full ID Card Preset screen!
-    if (_tabMode == ScanTabMode.idCards && !_inIdCardCamera && !isBackOrHasPages) {
+    // ID type picker (skipped when Tools opens a specific category).
+    if (scan.mode == CustomScanMode.idCard &&
+        !inIdCamera &&
+        !scan.skipIdTypePicker) {
       return IdCardTypeSelectorView(
         selectedCategory: scan.idCategory,
         onCategorySelected: (IdCardCategory cat) {
@@ -172,7 +178,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
         onClose: () => Navigator.of(context).maybePop(),
         onToggleFlash: _toggleFlash,
         isFlashOn: _flashMode == FlashMode.torch,
-        tabMode: _tabMode,
+        tabMode: ScanTabMode.idCards,
         onTabModeChanged: _onModeChanged,
         onOpenFeatures: _openFeaturesSheet,
       );
@@ -190,6 +196,18 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
     }
 
     final bool isId = scan.mode == CustomScanMode.idCard;
+    final ScanTabMode carouselMode =
+        isId ? ScanTabMode.idCards : _tabMode;
+    final String sideLabel = scan.idSide == IdScanSide.back
+        ? 'Back Side'
+        : (scan.idCategory.isSingleSide ? 'Info page' : 'Front Side');
+    final String frameHint = switch (scan.idCategory) {
+      IdCardCategory.passport => 'Fit passport page inside the frame',
+      IdCardCategory.driverLicense => 'Fit driver licence inside the frame',
+      IdCardCategory.bankCard => 'Fit bank card inside the frame',
+      IdCardCategory.idCard => 'Fit ID card inside the frame',
+      _ => 'Fit document inside the frame',
+    };
 
     return Container(
       color: Colors.black,
@@ -199,7 +217,9 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
             onClose: () {
               if (scan.pages.isNotEmpty) {
                 ref.read(customScanNotifierProvider.notifier).goToEnhance();
-              } else if (_tabMode == ScanTabMode.idCards && _inIdCardCamera) {
+              } else if (isId &&
+                  inIdCamera &&
+                  !scan.skipIdTypePicker) {
                 setState(() => _inIdCardCamera = false);
               } else {
                 Navigator.of(context).maybePop();
@@ -207,7 +227,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
             },
             flashMode: _flashMode,
             onFlashToggle: _toggleFlash,
-            onFilterTap: _tabMode == ScanTabMode.timestamp
+            onFilterTap: carouselMode == ScanTabMode.timestamp
                 ? () => EditTimestampBottomSheet.show(context)
                 : null,
           ),
@@ -222,6 +242,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
                       aspectRatio: _camera.previewAspectRatio,
                       isId: isId,
                       isBatch: _isBatch,
+                      frameHint: frameHint,
                       onBatchToggle: (bool val) => setState(() => _isBatch = val),
                       onFocusTap: (Offset pos, Size size) {
                         _camera.triggerFocus(screenPoint: pos, viewSize: size);
@@ -237,7 +258,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
                             onTap: () {
                               if (scan.pages.isNotEmpty) {
                                 ref.read(customScanNotifierProvider.notifier).goToEnhance();
-                              } else {
+                              } else if (!scan.skipIdTypePicker) {
                                 setState(() => _inIdCardCamera = false);
                               }
                             },
@@ -257,25 +278,37 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: <Widget>[
-                                  const Icon(LucideIcons.creditCard, size: 14, color: Color(0xFF00C292)),
+                                  Icon(
+                                    scan.idCategory == IdCardCategory.passport
+                                        ? LucideIcons.globe
+                                        : LucideIcons.creditCard,
+                                    size: 14,
+                                    color: const Color(0xFF00C292),
+                                  ),
                                   const SizedBox(width: 7),
                                   Text(
-                                    '${scan.idCategory.title} • ${scan.idSide == IdScanSide.front ? (scan.idCategory.isSingleSide ? "Document" : "Front Side") : "Back Side"}',
+                                    '${scan.idCategory.title} • $sideLabel',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  const SizedBox(width: 5),
-                                  const Icon(LucideIcons.chevronDown, size: 13, color: Colors.white70),
+                                  if (!scan.skipIdTypePicker) ...<Widget>[
+                                    const SizedBox(width: 4),
+                                    const Icon(
+                                      LucideIcons.chevronDown,
+                                      size: 14,
+                                      color: Colors.white70,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
                           ),
                         ),
                       ),
-                    if (_tabMode == ScanTabMode.timestamp) ...<Widget>[
+                    if (carouselMode == ScanTabMode.timestamp) ...<Widget>[
                       DraggableTimestampOverlay(
                         viewportSize: viewportSize,
                       ),
@@ -288,14 +321,21 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
                             EditTimestampBottomSheet.show(context);
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.black.withValues(alpha: 0.75),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: const Color(0xFF00C292), width: 1.2),
+                              border: Border.all(
+                                color: const Color(0xFF00C292),
+                                width: 1.2,
+                              ),
                               boxShadow: <BoxShadow>[
                                 BoxShadow(
-                                  color: const Color(0xFF00C292).withValues(alpha: 0.35),
+                                  color: const Color(0xFF00C292)
+                                      .withValues(alpha: 0.35),
                                   blurRadius: 8,
                                 ),
                               ],
@@ -303,7 +343,11 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: <Widget>[
-                                Icon(LucideIcons.palette, size: 14, color: Color(0xFF00C292)),
+                                Icon(
+                                  LucideIcons.palette,
+                                  size: 14,
+                                  color: Color(0xFF00C292),
+                                ),
                                 SizedBox(width: 5),
                                 Text(
                                   'Templates',
@@ -326,7 +370,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
           ),
           const SizedBox(height: 6),
           ScanModeCarousel(
-            selectedMode: _tabMode,
+            selectedMode: carouselMode,
             onModeSelected: _onModeChanged,
           ),
           ScanShutterBar(

@@ -36,13 +36,18 @@ class CustomScanNotifier extends _$CustomScanNotifier {
   @override
   CustomScanState build() => CustomScanState(documentTitle: _generateDefaultTitle());
 
-  void startSession(CustomScanMode mode, {IdCardCategory? idCategory}) {
+  void startSession(
+    CustomScanMode mode, {
+    IdCardCategory? idCategory,
+    bool enterIdCamera = false,
+  }) {
     _filterCache.clear();
     final IdCardCategory cat = idCategory ?? state.idCategory;
     state = CustomScanState(
       mode: mode,
       idSide: IdScanSide.front,
       idCategory: cat,
+      skipIdTypePicker: enterIdCamera && mode == CustomScanMode.idCard,
       documentTitle: _generateDefaultTitle(
         cat: mode == CustomScanMode.idCard ? cat : null,
       ),

@@ -14,6 +14,7 @@ class ScanCameraViewfinder extends StatefulWidget {
     required this.isId,
     required this.isBatch,
     required this.onBatchToggle,
+    this.frameHint = 'Fit ID card inside the frame',
     this.onFocusTap,
   });
 
@@ -22,6 +23,7 @@ class ScanCameraViewfinder extends StatefulWidget {
   final bool isId;
   final bool isBatch;
   final ValueChanged<bool> onBatchToggle;
+  final String frameHint;
   final void Function(Offset localPos, Size size)? onFocusTap;
 
   @override
@@ -91,6 +93,7 @@ class _ScanCameraViewfinderState extends State<ScanCameraViewfinder>
                   ),
                   ScanDocumentOverlay(
                     isIdCard: widget.isId,
+                    frameHint: widget.frameHint,
                   ),
                   if (_focusPos != null)
                     Positioned(

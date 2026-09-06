@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scanner_app/app/theme.dart';
 import 'package:scanner_app/core/enums/custom_scan_mode.dart';
+import 'package:scanner_app/core/enums/id_card_category.dart';
 import 'package:scanner_app/models/scanned_document.dart';
 import 'package:scanner_app/providers/library_provider.dart';
 import 'package:scanner_app/providers/pdf_tools_provider.dart';
@@ -13,6 +14,7 @@ import 'package:scanner_app/views/home/tabs/me_tab_view.dart';
 import 'package:scanner_app/views/home/tabs/tools_tab_view.dart';
 import 'package:scanner_app/views/home/widgets/center_camera_fab.dart';
 import 'package:scanner_app/views/home/widgets/main_bottom_bar.dart';
+import 'package:scanner_app/views/id_cards/id_cards_view.dart';
 import 'package:scanner_app/views/ocr/ocr_result_view.dart';
 import 'package:scanner_app/views/tools/compress_view.dart';
 import 'package:scanner_app/views/tools/merge_pdf_view.dart';
@@ -70,8 +72,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
               onOpenSettings: () => setState(() => _selectedTab = 3),
               onScanDocument: () =>
                   _push(const CustomScanView(mode: CustomScanMode.document)),
-              onIdCard: () =>
-                  _push(const CustomScanView(mode: CustomScanMode.idCard)),
+              onIdCard: () => _push(const IdCardsView()),
               onOcr: () => _push(const OcrResultView()),
               onMergePdf: () => _push(const MergePdfView()),
               onWatermark: () => _push(const WatermarkView()),
@@ -110,8 +111,13 @@ class _HomeViewState extends ConsumerState<HomeView> {
             ToolsTabView(
               onSmartScan: () =>
                   _push(const CustomScanView(mode: CustomScanMode.document)),
-              onIdCard: () =>
-                  _push(const CustomScanView(mode: CustomScanMode.idCard)),
+              onIdCategory: (IdCardCategory cat) => _push(
+                CustomScanView(
+                  mode: CustomScanMode.idCard,
+                  idCategory: cat,
+                  enterIdCamera: true,
+                ),
+              ),
               onOcr: () => _push(const OcrResultView()),
               onMergePdf: () => _push(const MergePdfView()),
               onWatermark: () => _push(const WatermarkView()),

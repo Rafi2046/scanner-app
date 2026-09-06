@@ -6,9 +6,11 @@ class ScanDocumentOverlay extends StatelessWidget {
   const ScanDocumentOverlay({
     super.key,
     required this.isIdCard,
+    this.frameHint = 'Fit ID card inside the frame',
   });
 
   final bool isIdCard;
+  final String frameHint;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +43,8 @@ class ScanDocumentOverlay extends StatelessWidget {
               right: 20,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.60),
                     borderRadius: BorderRadius.circular(20),
@@ -50,9 +53,10 @@ class ScanDocumentOverlay extends StatelessWidget {
                       width: 1,
                     ),
                   ),
-                  child: const Text(
-                    'Fit ID card inside the frame',
-                    style: TextStyle(
+                  child: Text(
+                    frameHint,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,

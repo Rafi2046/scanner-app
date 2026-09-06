@@ -22,6 +22,7 @@ class CustomScanState {
     this.rotationTurns = 0,
     this.idSide = IdScanSide.front,
     this.idCategory = IdCardCategory.general,
+    this.skipIdTypePicker = false,
     this.busy = false,
     this.busyMessage,
     this.error,
@@ -41,6 +42,9 @@ class CustomScanState {
   final int rotationTurns;
   final IdScanSide idSide;
   final IdCardCategory idCategory;
+
+  /// When true, ID capture skips the type picker and opens the camera.
+  final bool skipIdTypePicker;
   final bool busy;
   final String? busyMessage;
   final Object? error;
@@ -79,6 +83,7 @@ class CustomScanState {
     int? rotationTurns,
     IdScanSide? idSide,
     IdCardCategory? idCategory,
+    bool? skipIdTypePicker,
     bool? busy,
     String? busyMessage,
     Object? error,
@@ -103,6 +108,7 @@ class CustomScanState {
       rotationTurns: clearRotation ? 0 : (rotationTurns ?? this.rotationTurns),
       idSide: idSide ?? this.idSide,
       idCategory: idCategory ?? this.idCategory,
+      skipIdTypePicker: skipIdTypePicker ?? this.skipIdTypePicker,
       busy: busy ?? this.busy,
       busyMessage:
           clearBusyMessage ? null : (busyMessage ?? this.busyMessage),
