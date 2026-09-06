@@ -7,9 +7,7 @@ enum ScanTabMode {
   text('Extract Text'),
   idCards('ID Cards'),
   scan('Scan'),
-  sign('Sign'),
-  toWord('To Word'),
-  questionSet('Question Set');
+  sign('Sign');
 
   const ScanTabMode(this.label);
   final String label;

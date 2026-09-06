@@ -125,10 +125,6 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
         _push(const OcrResultView());
       case ScanTabMode.sign:
         _push(const SignatureView());
-      case ScanTabMode.toWord:
-        _push(const PdfToImageView());
-      case ScanTabMode.questionSet:
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Question Set active.')));
     }
   }
 
