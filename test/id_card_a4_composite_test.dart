@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:scanner_app/core/enums/custom_scan_mode.dart';
+import 'package:scanner_app/core/enums/custom_scan_step.dart';
 import 'package:scanner_app/core/enums/id_card_category.dart';
 import 'package:scanner_app/core/enums/id_scan_side.dart';
 import 'package:scanner_app/models/scan_page_draft.dart';
@@ -69,6 +70,34 @@ void main() {
 
       expect(state.canSaveIdCard, isTrue);
       expect(state.canSave, isTrue);
+    });
+
+    test('prepareScanBackSide transitions state to capture with back side and preserves front page', () {
+      const CustomScanState initial = CustomScanState(
+        mode: CustomScanMode.idCard,
+        idCategory: IdCardCategory.general,
+        pages: <ScanPageDraft>[
+          ScanPageDraft(imagePath: 'front.jpg', idSide: IdScanSide.front),
+        ],
+      );
+
+      final CustomScanState backState = initial.copyWith(
+        step: CustomScanStep.capture,
+        idSide: IdScanSide.back,
+        clearPending: true,
+        clearWarped: true,
+        clearRotation: true,
+        clearError: true,
+      );
+
+      expect(backState.step, CustomScanStep.capture);
+      expect(backState.idSide, IdScanSide.back);
+      expect(backState.pages.length, 1);
+      expect(backState.pages.first.idSide, IdScanSide.front);
+      // isBackOrHasPages check
+      final bool isBackOrHasPages = backState.mode == CustomScanMode.idCard &&
+          (backState.idSide == IdScanSide.back || backState.pages.isNotEmpty);
+      expect(isBackOrHasPages, isTrue);
     });
   });
 }

@@ -23,6 +23,7 @@ Uint8List applyScanFilterIsolate(({
   final img.Image out = switch (filter) {
     ScanFilter.original => decoded,
     ScanFilter.magicEnhance => _magicColorFilter(decoded),
+    ScanFilter.vivid => _vividColorFilter(decoded),
     ScanFilter.noShadow => _noShadowFilter(decoded),
     ScanFilter.bw => _bwScanFilter(decoded),
     ScanFilter.grayscale => _grayscaleFilter(decoded),
@@ -49,6 +50,19 @@ Uint8List rotateJpegBytesIsolate(({
   return Uint8List.fromList(
     img.encodeJpg(rotated, quality: args.quality),
   );
+}
+
+/// Apple "Vivid" (True Color Vibrance & Micro-Contrast):
+img.Image _vividColorFilter(img.Image src) {
+  final img.Image enhanced = _processDocument(
+    src,
+    blackCut: 0.22,
+    whiteCut: 0.94,
+    isColor: true,
+    boostSaturation: true,
+  );
+  final img.Image punchy = img.adjustColor(enhanced, saturation: 1.25, contrast: 1.08);
+  return _unsharpMaskDart(punchy, amount: 0.28);
 }
 
 /// CamScanner "Magic Enhance" (Color Document):

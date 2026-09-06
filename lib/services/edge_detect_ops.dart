@@ -642,16 +642,15 @@ String applyScanFilterFastSync(({
 
       case 'magicEnhance':
       case 'color':
-        // CAMSCANNER "MAGIC ENHANCE" (6-STAGE TRUE-COLOR PIPELINE):
+        // TRUE-COLOR DOCUMENT PIPELINE (CLAHE + Unsharp Mask on Bilateral Denoised):
         // 1. Bilateral Denoising: Preserves text edges while eliminating CMOS sensor noise
-        final cv.Mat denoised = cv.bilateralFilter(src, 7, 50, 50);
+        final cv.Mat denoised = cv.bilateralFilter(src, 9, 75, 75);
 
         // 2. LAB Color Space: Separates Luminance (L) from Chrominance (A: green-red, B: blue-yellow)
         final cv.Mat lab = cv.cvtColor(denoised, cv.COLOR_BGR2Lab);
         final cv.VecMat labChannels = cv.split(lab);
 
-        // 3. CLAHE on L channel only: Equalizes local illumination gradients without shifting colors,
-        // preventing yellow burn halos on seals/emblems and preserving natural skin tones.
+        // 3. CLAHE on L channel only: Equalizes local illumination gradients without shifting colors
         final cv.CLAHE clahe = cv.createCLAHE(clipLimit: 2.0, tileGridSize: (8, 8));
         final cv.Mat lEnhanced = clahe.apply(labChannels[0]);
         final cv.VecMat mergedLab = cv.VecMat.fromList(<cv.Mat>[
@@ -661,12 +660,9 @@ String applyScanFilterFastSync(({
         ]);
         final cv.Mat colorLab = cv.cvtColor(cv.merge(mergedLab), cv.COLOR_Lab2BGR);
 
-        // 4. Subtle Ink Contrast (alpha: 1.06, beta: 0 - zero destructive channel clipping)
-        temp1 = cv.convertScaleAbs(colorLab, alpha: 1.06, beta: 0);
-
-        // 5. Unsharp Mask: Enhances high-frequency edge gradients for razor-sharp Bengali/English legibility
-        blurMask = cv.gaussianBlur(temp1, (0, 0), 2.0);
-        result = cv.addWeighted(temp1, 1.35, blurMask, -0.35, 0);
+        // 4. Unsharp Mask: (0, 0), sigma 3.0, weighted 1.5 and -0.5 for crisp typography
+        blurMask = cv.gaussianBlur(colorLab, (0, 0), 3.0);
+        result = cv.addWeighted(colorLab, 1.5, blurMask, -0.5, 0);
 
         denoised.dispose();
         lab.dispose();
@@ -677,10 +673,54 @@ String applyScanFilterFastSync(({
         colorLab.dispose();
         break;
 
+      case 'vivid':
+        // APPLE-GRADE VIVID FILTER:
+        // Deep dimensional micro-contrast, selective chromatic saturation (+24%),
+        // and razor-sharp edge definition without blowing out skin tones or highlights.
+        final cv.Mat denoisedVivid = cv.bilateralFilter(src, 9, 75, 75);
+
+        // 1. Convert to LAB color space for clean chroma-luminance separation
+        final cv.Mat labVivid = cv.cvtColor(denoisedVivid, cv.COLOR_BGR2Lab);
+        final cv.VecMat labChs = cv.split(labVivid);
+
+        // 2. Punchy CLAHE on Luminance (L) channel
+        final cv.CLAHE claheVivid = cv.createCLAHE(clipLimit: 2.4, tileGridSize: (8, 8));
+        final cv.Mat lVivid = claheVivid.apply(labChs[0]);
+
+        // 3. Apple Vibrance: boost A and B chromatic channels (+24% vibrance around neutral 128)
+        // Formula: alpha * x + beta, where beta = 128 * (1 - alpha) guarantees neutral 128 stays exact 128!
+        final cv.Mat aVivid = cv.convertScaleAbs(labChs[1], alpha: 1.24, beta: -30.72);
+        final cv.Mat bVivid = cv.convertScaleAbs(labChs[2], alpha: 1.24, beta: -30.72);
+
+        final cv.VecMat mergedVivid = cv.VecMat.fromList(<cv.Mat>[
+          lVivid,
+          aVivid,
+          bVivid,
+        ]);
+        final cv.Mat colorVivid = cv.cvtColor(cv.merge(mergedVivid), cv.COLOR_Lab2BGR);
+
+        // 4. Subtle Apple S-curve contrast boost
+        temp1 = cv.convertScaleAbs(colorVivid, alpha: 1.08, beta: -4);
+
+        // 5. High-Definition Unsharp Mask: sharp text, barcodes, and vibrant stamps
+        blurMask = cv.gaussianBlur(temp1, (0, 0), 2.5);
+        result = cv.addWeighted(temp1, 1.40, blurMask, -0.40, 0);
+
+        denoisedVivid.dispose();
+        labVivid.dispose();
+        labChs.dispose();
+        claheVivid.dispose();
+        lVivid.dispose();
+        aVivid.dispose();
+        bVivid.dispose();
+        mergedVivid.dispose();
+        colorVivid.dispose();
+        break;
+
       case 'bw':
       case 'bwPrint':
-        // CAMSCANNER "BW PRINT" (ADAPTIVE THRESHOLD PHOTOCOPY):
-        final cv.Mat denoisedBw = cv.bilateralFilter(src, 7, 50, 50);
+        // ADAPTIVE THRESHOLD PHOTOCOPY:
+        final cv.Mat denoisedBw = cv.bilateralFilter(src, 9, 75, 75);
         final cv.Mat grayBw = cv.cvtColor(denoisedBw, cv.COLOR_BGR2GRAY);
         result = cv.adaptiveThreshold(
           grayBw,
@@ -695,13 +735,12 @@ String applyScanFilterFastSync(({
         break;
 
       case 'grayscale':
-        // CAMSCANNER "GRAYSCALE" (SMOOTH MONOCHROME WITH PHOTOS/SEALS):
-        final cv.Mat denoisedGray = cv.bilateralFilter(src, 7, 50, 50);
+      case 'gray':
+        // GRAYSCALE (CLAHE ON DENOISED LUMINANCE):
+        final cv.Mat denoisedGray = cv.bilateralFilter(src, 9, 75, 75);
         temp1 = cv.cvtColor(denoisedGray, cv.COLOR_BGR2GRAY);
         final cv.CLAHE claheGray = cv.createCLAHE(clipLimit: 2.0, tileGridSize: (8, 8));
-        temp2 = claheGray.apply(temp1);
-        blurMask = cv.gaussianBlur(temp2, (0, 0), 2.0);
-        result = cv.addWeighted(temp2, 1.30, blurMask, -0.30, 0);
+        result = claheGray.apply(temp1);
         denoisedGray.dispose();
         claheGray.dispose();
         break;
@@ -767,3 +806,33 @@ String applyScanFilterFastSync(({
     src.dispose();
   }
 }
+
+/// Manual adjustment layer — driven by UI brightness/contrast/sharpness adjustments.
+class ManualAdjust {
+  const ManualAdjust._();
+
+  static cv.Mat apply(
+    cv.Mat input, {
+    double brightness = 0, // -100 to 100
+    double contrast = 1.0, // 0.5 to 2.0
+    double sharpness = 0, // 0 to 2.0
+  }) {
+    cv.Mat result = cv.convertScaleAbs(input, alpha: contrast, beta: brightness);
+
+    if (sharpness > 0) {
+      final cv.Mat gaussian = cv.gaussianBlur(result, (0, 0), 3.0);
+      final cv.Mat sharpened = cv.addWeighted(
+        result,
+        1.0 + sharpness,
+        gaussian,
+        -sharpness,
+        0,
+      );
+      gaussian.dispose();
+      result.dispose();
+      result = sharpened;
+    }
+    return result;
+  }
+}
+

@@ -1,156 +1,136 @@
 import 'package:flutter/material.dart';
-import 'package:scanner_app/models/scan_quad.dart';
 
-/// Mint document overlay — animates between idle frame and detected document.
-class ScanDocumentOverlay extends StatefulWidget {
+/// Clean, static camera overlay for ID cards.
+/// Replaces jumpy live object detection with a clean, static framing guide.
+class ScanDocumentOverlay extends StatelessWidget {
   const ScanDocumentOverlay({
     super.key,
-    required this.normalizedQuad,
     required this.isIdCard,
-    this.cameraAspectRatio = 9 / 16,
   });
 
-  final ScanQuad? normalizedQuad;
   final bool isIdCard;
-  final double cameraAspectRatio;
-
-  @override
-  State<ScanDocumentOverlay> createState() => _ScanDocumentOverlayState();
-}
-
-class _ScanDocumentOverlayState extends State<ScanDocumentOverlay>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _anim;
-  ScanQuad? _prev;
-  ScanQuad? _target;
-
-  static const ScanQuad _defQuad = ScanQuad(
-    topLeft: Offset(0.02, 0.02),
-    topRight: Offset(0.98, 0.02),
-    bottomRight: Offset(0.98, 0.98),
-    bottomLeft: Offset(0.02, 0.98),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
-    _prev = widget.normalizedQuad ?? _defQuad;
-    _target = widget.normalizedQuad ?? _defQuad;
-  }
-
-  @override
-  void didUpdateWidget(covariant ScanDocumentOverlay old) {
-    super.didUpdateWidget(old);
-    if (widget.normalizedQuad != old.normalizedQuad) {
-      _prev = _lerpQuad(_prev, _target, _anim.value);
-      _target = widget.normalizedQuad ?? _defQuad;
-      _anim.forward(from: 0.0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _anim.dispose();
-    super.dispose();
-  }
-
-  ScanQuad _lerpQuad(ScanQuad? a, ScanQuad? b, double t) {
-    final ScanQuad from = a ?? _defQuad;
-    final ScanQuad to = b ?? _defQuad;
-    return ScanQuad(
-      topLeft: Offset.lerp(from.topLeft, to.topLeft, t)!,
-      topRight: Offset.lerp(from.topRight, to.topRight, t)!,
-      bottomRight: Offset.lerp(from.bottomRight, to.bottomRight, t)!,
-      bottomLeft: Offset.lerp(from.bottomLeft, to.bottomLeft, t)!,
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _anim,
-      builder: (BuildContext context, _) {
-        final ScanQuad current = _lerpQuad(_prev, _target, _anim.value);
-        return CustomPaint(
-          painter: _DocOverlayPainter(
-            quad: current,
-            isIdCard: widget.isIdCard,
-            isDoc: widget.normalizedQuad != null,
-            camAspect: widget.cameraAspectRatio,
-          ),
-          child: const SizedBox.expand(),
+    if (!isIdCard) {
+      return const SizedBox.shrink();
+    }
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double width = constraints.maxWidth;
+        final double height = constraints.maxHeight;
+        final double cardW = width * 0.84;
+        final double cardH = cardW / 1.586; // ISO/IEC 7810 ID-1 standard ratio
+        final Rect cardRect = Rect.fromCenter(
+          center: Offset(width / 2, height / 2),
+          width: cardW,
+          height: cardH,
+        );
+
+        return Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            CustomPaint(
+              size: Size(width, height),
+              painter: _IdCardGuidePainter(cardRect: cardRect),
+            ),
+            Positioned(
+              top: cardRect.bottom + 16,
+              left: 20,
+              right: 20,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.60),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Text(
+                    'Fit ID card inside the frame',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );
   }
 }
 
-class _DocOverlayPainter extends CustomPainter {
-  const _DocOverlayPainter({
-    required this.quad,
-    required this.isIdCard,
-    required this.isDoc,
-    required this.camAspect,
-  });
+class _IdCardGuidePainter extends CustomPainter {
+  const _IdCardGuidePainter({required this.cardRect});
 
-  final ScanQuad quad;
-  final bool isIdCard;
-  final bool isDoc;
-  final double camAspect;
+  final Rect cardRect;
 
-  static const Color mint = Color(0xFF00D2A0);
-
-  Offset _map(Offset p, Size size) {
-    if (camAspect <= 0) return Offset(p.dx * size.width, p.dy * size.height);
-    final double viewAspect = size.width / size.height;
-    if (viewAspect > camAspect) {
-      final double pH = size.width / camAspect;
-      return Offset(p.dx * size.width, p.dy * pH - (pH - size.height) / 2.0);
-    } else {
-      final double pW = size.height * camAspect;
-      return Offset(p.dx * pW - (pW - size.width) / 2.0, p.dy * size.height);
-    }
-  }
+  static const Color accent = Color(0xFF00D2A0);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Offset tl = _map(quad.topLeft, size);
-    final Offset tr = _map(quad.topRight, size);
-    final Offset br = _map(quad.bottomRight, size);
-    final Offset bl = _map(quad.bottomLeft, size);
+    final RRect rrect = RRect.fromRectAndRadius(cardRect, const Radius.circular(14));
 
-    final Path path = Path()..moveTo(tl.dx, tl.dy)..lineTo(tr.dx, tr.dy)..lineTo(br.dx, br.dy)..lineTo(bl.dx, bl.dy)..close();
+    // 1. Subtle dark vignette/scrim outside the card area
+    final Path fullPath = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final Path cardPath = Path()..addRRect(rrect);
+    final Path scrimPath = Path.combine(PathOperation.difference, fullPath, cardPath);
+    canvas.drawPath(
+      scrimPath,
+      Paint()..color = Colors.black.withValues(alpha: 0.38),
+    );
 
-    if (isDoc) {
-      canvas.drawPath(path, Paint()..color = mint.withValues(alpha: 0.28)..style = PaintingStyle.fill);
-      canvas.drawPath(path, Paint()..color = mint..strokeWidth = 2.5..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+    // 2. Subtle white guide border
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
 
-      final Paint cp = Paint()..color = mint..strokeWidth = 4.0..style = PaintingStyle.stroke..strokeCap = StrokeCap.square;
-      const double cLen = 20.0;
-      _drawCorner(canvas, cp, tl, tr, bl, cLen);
-      _drawCorner(canvas, cp, tr, tl, br, cLen);
-      _drawCorner(canvas, cp, br, bl, tr, cLen);
-      _drawCorner(canvas, cp, bl, br, tl, cLen);
-    } else {
-      const double pad = 2.0;
-      final Rect r = Rect.fromLTWH(pad, pad, size.width - pad * 2, size.height - pad * 2);
-      canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(12)), Paint()..color = mint.withValues(alpha: 0.65)..strokeWidth = 1.5..style = PaintingStyle.stroke);
-      if (isIdCard) {
-        final double cW = size.width * 0.82;
-        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(size.width / 2, size.height / 2), width: cW, height: cW / 1.58), const Radius.circular(10)), Paint()..color = Colors.white.withValues(alpha: 0.75)..strokeWidth = 1.5..style = PaintingStyle.stroke);
-      }
-    }
-  }
+    // 3. Crisp modern corner brackets in mint accent
+    final Paint cornerPaint = Paint()
+      ..color = accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0
+      ..strokeCap = StrokeCap.round;
 
-  void _drawCorner(Canvas canvas, Paint paint, Offset c, Offset h, Offset v, double len) {
-    final Offset dh = (h - c) / (h - c).distance;
-    final Offset dv = (v - c) / (v - c).distance;
-    canvas.drawLine(c, c + dh * len, paint);
-    canvas.drawLine(c, c + dv * len, paint);
+    const double cLen = 22.0;
+    final double l = cardRect.left;
+    final double t = cardRect.top;
+    final double r = cardRect.right;
+    final double b = cardRect.bottom;
+    const double radiusOffset = 14.0;
+
+    // Top-left corner
+    canvas.drawLine(Offset(l + radiusOffset, t), Offset(l + radiusOffset + cLen, t), cornerPaint);
+    canvas.drawLine(Offset(l, t + radiusOffset), Offset(l, t + radiusOffset + cLen), cornerPaint);
+
+    // Top-right corner
+    canvas.drawLine(Offset(r - radiusOffset, t), Offset(r - radiusOffset - cLen, t), cornerPaint);
+    canvas.drawLine(Offset(r, t + radiusOffset), Offset(r, t + radiusOffset + cLen), cornerPaint);
+
+    // Bottom-left corner
+    canvas.drawLine(Offset(l + radiusOffset, b), Offset(l + radiusOffset + cLen, b), cornerPaint);
+    canvas.drawLine(Offset(l, b - radiusOffset), Offset(l, b - radiusOffset - cLen), cornerPaint);
+
+    // Bottom-right corner
+    canvas.drawLine(Offset(r - radiusOffset, b), Offset(r - radiusOffset - cLen, b), cornerPaint);
+    canvas.drawLine(Offset(r, b - radiusOffset), Offset(r, b - radiusOffset - cLen), cornerPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _DocOverlayPainter old) =>
-      old.quad != quad || old.isIdCard != isIdCard || old.isDoc != isDoc || old.camAspect != camAspect;
+  bool shouldRepaint(covariant _IdCardGuidePainter oldDelegate) =>
+      oldDelegate.cardRect != cardRect;
 }

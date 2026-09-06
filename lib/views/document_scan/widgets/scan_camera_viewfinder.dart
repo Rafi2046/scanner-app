@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:scanner_app/models/scan_quad.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_batch_pill.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_document_overlay.dart';
 
@@ -14,7 +13,6 @@ class ScanCameraViewfinder extends StatefulWidget {
     required this.aspectRatio,
     required this.isId,
     required this.isBatch,
-    required this.normalizedQuad,
     required this.onBatchToggle,
     this.onFocusTap,
   });
@@ -23,7 +21,6 @@ class ScanCameraViewfinder extends StatefulWidget {
   final double aspectRatio;
   final bool isId;
   final bool isBatch;
-  final ScanQuad? normalizedQuad;
   final ValueChanged<bool> onBatchToggle;
   final void Function(Offset localPos, Size size)? onFocusTap;
 
@@ -93,9 +90,7 @@ class _ScanCameraViewfinderState extends State<ScanCameraViewfinder>
                     ),
                   ),
                   ScanDocumentOverlay(
-                    normalizedQuad: widget.normalizedQuad,
                     isIdCard: widget.isId,
-                    cameraAspectRatio: widget.aspectRatio,
                   ),
                   if (_focusPos != null)
                     Positioned(

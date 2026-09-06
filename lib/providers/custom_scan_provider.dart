@@ -271,6 +271,17 @@ class CustomScanNotifier extends _$CustomScanNotifier {
     );
   }
 
+  void goToEnhance() {
+    if (state.pages.isEmpty) return;
+    state = state.copyWith(
+      step: CustomScanStep.enhance,
+      clearPending: true,
+      clearWarped: true,
+      clearRotation: true,
+      clearError: true,
+    );
+  }
+
   void addPageViaCamera() {
     goToCapture();
   }

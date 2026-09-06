@@ -78,7 +78,11 @@ class _CustomScanViewState extends ConsumerState<CustomScanView> {
       final notifier = ref.read(customScanNotifierProvider.notifier);
       switch (scan.step) {
         case CustomScanStep.capture:
-          Navigator.of(context).maybePop();
+          if (scan.pages.isNotEmpty) {
+            notifier.goToEnhance();
+          } else {
+            Navigator.of(context).maybePop();
+          }
         case CustomScanStep.crop:
           notifier.goToCapture();
         case CustomScanStep.enhance:
@@ -88,7 +92,7 @@ class _CustomScanViewState extends ConsumerState<CustomScanView> {
       }
     }
 
-    final bool isAtRoot = scan.step == CustomScanStep.capture;
+    final bool isAtRoot = scan.step == CustomScanStep.capture && scan.pages.isEmpty;
 
     return PopScope(
       canPop: isAtRoot && !scan.busy,

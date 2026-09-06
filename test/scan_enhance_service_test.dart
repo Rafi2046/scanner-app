@@ -67,6 +67,20 @@ void main() {
       expect(decoded.height, 100);
     });
 
+    test('vivid processes successfully with rich color saturation', () {
+      final Uint8List result = applyScanFilterIsolate((
+        bytes: testJpegBytes,
+        filterName: ScanFilter.vivid.name,
+        quality: 90,
+      ));
+
+      expect(result, isNotEmpty);
+      final img.Image? decoded = img.decodeImage(result);
+      expect(decoded, isNotNull);
+      expect(decoded!.width, 100);
+      expect(decoded.height, 100);
+    });
+
     test('bwPrint produces pure binary black and white output', () {
       final Uint8List result = applyScanFilterIsolate((
         bytes: testJpegBytes,

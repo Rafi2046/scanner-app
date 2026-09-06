@@ -2,6 +2,7 @@
 enum ScanFilter {
   original,
   magicEnhance,
+  vivid,
   grayscale,
   bw,
   noShadow,
@@ -17,6 +18,7 @@ enum ScanFilter {
   String get label => switch (this) {
         ScanFilter.original => 'Original',
         ScanFilter.magicEnhance => 'Magic Enhance',
+        ScanFilter.vivid => 'Vivid',
         ScanFilter.grayscale => 'Grayscale',
         ScanFilter.bw => 'Pure B&W',
         ScanFilter.noShadow => 'No Shadow',

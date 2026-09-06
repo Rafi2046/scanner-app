@@ -10,9 +10,7 @@ import 'package:scanner_app/core/errors/app_exception.dart';
 import 'package:scanner_app/providers/custom_scan_provider.dart';
 import 'package:scanner_app/providers/custom_scan_state.dart';
 import 'package:scanner_app/providers/service_providers.dart';
-import 'package:scanner_app/models/scan_quad.dart';
 import 'package:scanner_app/services/camera_capture_service.dart';
-import 'package:scanner_app/services/live_document_detector.dart';
 import 'package:scanner_app/views/document_scan/widgets/id_card_type_selector_view.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_camera_top_bar.dart';
 import 'package:scanner_app/views/document_scan/widgets/scan_camera_viewfinder.dart';
@@ -39,9 +37,7 @@ class CaptureStepView extends ConsumerStatefulWidget {
 }
 
 class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
-  final LiveDocumentDetector _detector = LiveDocumentDetector();
   late final CameraCaptureService _camera;
-  ScanQuad? _detectedQuad;
   bool _ready = false;
   bool _disposed = false;
   Object? _initError;
@@ -49,15 +45,19 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   bool _isBatch = false;
   ScanTabMode _tabMode = ScanTabMode.scan;
   bool _inIdCardCamera = false;
-  int _missedFrames = 0;
 
   @override
   void initState() {
     super.initState();
     _camera = ref.read(cameraCaptureServiceProvider);
-    _tabMode = ref.read(customScanNotifierProvider).mode == CustomScanMode.idCard
+    final CustomScanState scan = ref.read(customScanNotifierProvider);
+    _tabMode = scan.mode == CustomScanMode.idCard
         ? ScanTabMode.idCards
         : ScanTabMode.scan;
+    if (scan.mode == CustomScanMode.idCard &&
+        (scan.idSide == IdScanSide.back || scan.pages.isNotEmpty)) {
+      _inIdCardCamera = true;
+    }
     _initCamera();
   }
 
@@ -74,30 +74,9 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
       await _camera.initialize();
       if (!mounted || _disposed) return;
       setState(() => _ready = true);
-      final int orientation = _camera.sensorOrientation;
-      await _camera.startImageStream((CameraImage image) {
-        if (!_disposed && mounted) {
-          _scheduleDetection(image, orientation);
-        }
-      });
     } catch (error) {
       if (mounted && !_disposed) setState(() => _initError = error);
     }
-  }
-
-  void _scheduleDetection(CameraImage image, int orientation) {
-    _detector.detectLiveDocument(image, orientation).then((ScanQuad? quad) {
-      if (!mounted || _disposed) return;
-      if (quad != null) {
-        _missedFrames = 0;
-        setState(() => _detectedQuad = quad);
-      } else if (_detectedQuad != null) {
-        _missedFrames++;
-        if (_missedFrames > 12) {
-          setState(() => _detectedQuad = null);
-        }
-      }
-    });
   }
 
   Future<void> _toggleFlash() async {
@@ -132,8 +111,6 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
     final notifier = ref.read(customScanNotifierProvider.notifier);
     notifier.beginCapture();
     try {
-      final ScanQuad? live = _detectedQuad;
-      await _camera.stopImageStream();
       final String rawPath = await action();
       _flashMode = FlashMode.off;
       await _camera.setFlash(FlashMode.off);
@@ -146,7 +123,7 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
             );
       }
 
-      await notifier.onRawCaptured(finalPath, liveQuad: live);
+      await notifier.onRawCaptured(finalPath);
     } on ScannerCancelledException {
       notifier.cancelBusy();
     } catch (error) {
@@ -179,9 +156,11 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
   @override
   Widget build(BuildContext context) {
     final CustomScanState scan = ref.watch(customScanNotifierProvider);
+    final bool isBackOrHasPages = scan.mode == CustomScanMode.idCard &&
+        (scan.idSide == IdScanSide.back || scan.pages.isNotEmpty);
 
     // If user is on ID Cards tab and hasn't started the camera yet, show the full ID Card Preset screen!
-    if (_tabMode == ScanTabMode.idCards && !_inIdCardCamera) {
+    if (_tabMode == ScanTabMode.idCards && !_inIdCardCamera && !isBackOrHasPages) {
       return IdCardTypeSelectorView(
         selectedCategory: scan.idCategory,
         onCategorySelected: (IdCardCategory cat) {
@@ -218,7 +197,9 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
         children: <Widget>[
           ScanCameraTopBar(
             onClose: () {
-              if (_tabMode == ScanTabMode.idCards && _inIdCardCamera) {
+              if (scan.pages.isNotEmpty) {
+                ref.read(customScanNotifierProvider.notifier).goToEnhance();
+              } else if (_tabMode == ScanTabMode.idCards && _inIdCardCamera) {
                 setState(() => _inIdCardCamera = false);
               } else {
                 Navigator.of(context).maybePop();
@@ -241,7 +222,6 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
                       aspectRatio: _camera.previewAspectRatio,
                       isId: isId,
                       isBatch: _isBatch,
-                      normalizedQuad: _detectedQuad,
                       onBatchToggle: (bool val) => setState(() => _isBatch = val),
                       onFocusTap: (Offset pos, Size size) {
                         _camera.triggerFocus(screenPoint: pos, viewSize: size);
@@ -254,7 +234,13 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
                         right: 0,
                         child: Center(
                           child: GestureDetector(
-                            onTap: () => setState(() => _inIdCardCamera = false),
+                            onTap: () {
+                              if (scan.pages.isNotEmpty) {
+                                ref.read(customScanNotifierProvider.notifier).goToEnhance();
+                              } else {
+                                setState(() => _inIdCardCamera = false);
+                              }
+                            },
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                               decoration: BoxDecoration(

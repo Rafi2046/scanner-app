@@ -900,8 +900,8 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
   }) {
     return LayoutBuilder(
       builder: (BuildContext ctx, BoxConstraints constraints) {
-        final double availW = constraints.maxWidth - 24;
-        final double availH = constraints.maxHeight - 12;
+        final double availW = constraints.maxWidth - 44;
+        final double availH = constraints.maxHeight - 20;
         double sheetW = availW;
         double sheetH = sheetW * 1.414;
         if (sheetH > availH) {
@@ -909,9 +909,11 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
           sheetW = sheetH / 1.414;
         }
 
-        final double cardW = sheetW * 0.80;
+        // Exact 58% card width matching reference photocopy (Image 2)
+        final double cardW = sheetW * 0.58;
         final double cardH = cardW / 1.586;
-        final double cardRadius = math.max(8.0, cardW * 0.038);
+        final double cardRadius = math.max(6.0, cardW * 0.035);
+        final double verticalGap = sheetH * 0.14;
         final bool isSingleSide = scan.idCategory.isSingleSide;
 
         return Center(
@@ -920,53 +922,69 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
             height: sheetH,
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(6),
               boxShadow: <BoxShadow>[
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  blurRadius: 22,
+                  color: Colors.black.withValues(alpha: 0.50),
+                  blurRadius: 24,
                   spreadRadius: 2,
-                  offset: const Offset(0, 6),
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: isSingleSide
                 ? Center(
-                    child: _buildIdCardSlot(
-                      draft: frontDraft,
-                      width: cardW,
-                      height: cardH,
-                      radius: cardRadius,
-                      label: 'FRONT',
-                      isSelected: _selectedIdSideIndex == 0,
-                      onTap: () {
-                        setState(() => _selectedIdSideIndex = 0);
-                        if (frontDraft != null) {
-                          ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
-                        }
-                      },
-                      onRetake: () {
-                        setState(() => _selectedIdSideIndex = 0);
-                        ref.read(customScanNotifierProvider.notifier).goToCapture();
-                      },
-                      onCrop: () {
-                        setState(() => _selectedIdSideIndex = 0);
-                        if (frontDraft != null) {
-                          ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
-                        }
-                        ref.read(customScanNotifierProvider.notifier).goToCrop();
-                      },
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            'FRONT SIDE',
+                            style: TextStyle(
+                              color: _selectedIdSideIndex == 0 ? _accent : const Color(0xFF8A939F),
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                        _buildIdCardSlot(
+                          draft: frontDraft,
+                          width: cardW,
+                          height: cardH,
+                          radius: cardRadius,
+                          isSelected: _selectedIdSideIndex == 0,
+                          onTap: () {
+                            setState(() => _selectedIdSideIndex = 0);
+                            if (frontDraft != null) {
+                              ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   )
                 : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          'FRONT SIDE',
+                          style: TextStyle(
+                            color: _selectedIdSideIndex == 0 ? _accent : const Color(0xFF8A939F),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
                       _buildIdCardSlot(
                         draft: frontDraft,
                         width: cardW,
                         height: cardH,
                         radius: cardRadius,
-                        label: 'FRONT',
                         isSelected: _selectedIdSideIndex == 0,
                         onTap: () {
                           setState(() => _selectedIdSideIndex = 0);
@@ -974,39 +992,30 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                             ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
                           }
                         },
-                        onRetake: () {
-                          setState(() => _selectedIdSideIndex = 0);
-                          ref.read(customScanNotifierProvider.notifier).goToCapture();
-                        },
-                        onCrop: () {
-                          setState(() => _selectedIdSideIndex = 0);
-                          if (frontDraft != null) {
-                            ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
-                          }
-                          ref.read(customScanNotifierProvider.notifier).goToCrop();
-                        },
                       ),
-                      SizedBox(height: sheetH * 0.065),
+                      SizedBox(height: verticalGap),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          'BACK SIDE',
+                          style: TextStyle(
+                            color: _selectedIdSideIndex == 1 ? _accent : const Color(0xFF8A939F),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
                       backDraft != null
                           ? _buildIdCardSlot(
                               draft: backDraft,
                               width: cardW,
                               height: cardH,
                               radius: cardRadius,
-                              label: 'BACK',
                               isSelected: _selectedIdSideIndex == 1,
                               onTap: () {
                                 setState(() => _selectedIdSideIndex = 1);
                                 ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(backDraft));
-                              },
-                              onRetake: () {
-                                setState(() => _selectedIdSideIndex = 1);
-                                ref.read(customScanNotifierProvider.notifier).prepareScanBackSide();
-                              },
-                              onCrop: () {
-                                setState(() => _selectedIdSideIndex = 1);
-                                ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(backDraft));
-                                ref.read(customScanNotifierProvider.notifier).goToCrop();
                               },
                             )
                           : _buildIdCardPlaceholder(
@@ -1028,11 +1037,8 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     required double width,
     required double height,
     required double radius,
-    required String label,
     required bool isSelected,
     required VoidCallback onTap,
-    required VoidCallback onRetake,
-    required VoidCallback onCrop,
   }) {
     if (draft == null) {
       return SizedBox(width: width, height: height);
@@ -1045,12 +1051,12 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(
-            color: isSelected ? _accent : Colors.black.withValues(alpha: 0.14),
+            color: isSelected ? _accent : Colors.black.withValues(alpha: 0.12),
             width: isSelected ? 2.0 : 0.8,
           ),
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.10),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -1058,106 +1064,14 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(radius - 0.5),
-          child: Stack(
-            fit: StackFit.expand,
-            children: <Widget>[
-              RotatedBox(
-                quarterTurns: draft.rotationTurns,
-                child: Transform.scale(
-                  scale: 1.03, // Slight 3% zoom crops away any dark desk edge pixels
-                  child: DocumentScanBeam(
-                    trigger: _scanTrigger,
-                    imagePath: draft.imagePath,
-                    previousImagePath: _previousPath ?? draft.rawPath,
-                    duration: const Duration(milliseconds: 1350),
-                  ),
-                ),
-              ),
-
-              // Top-left label badge (FRONT / BACK)
-              Positioned(
-                top: 7,
-                left: 7,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.70),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white24, width: 0.6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      if (isSelected)
-                        Container(
-                          width: 5,
-                          height: 5,
-                          margin: const EdgeInsets.only(right: 4),
-                          decoration: const BoxDecoration(
-                            color: _accent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      Text(
-                        label,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Bottom-right quick edit chips
-              Positioned(
-                bottom: 6,
-                right: 6,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    GestureDetector(
-                      onTap: onCrop,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.65),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Row(
-                          children: <Widget>[
-                            Icon(Icons.crop_rounded, color: Colors.white, size: 12),
-                            SizedBox(width: 3),
-                            Text('Crop', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: onRetake,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.65),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Row(
-                          children: <Widget>[
-                            Icon(Icons.refresh_rounded, color: Colors.white, size: 12),
-                            SizedBox(width: 3),
-                            Text('Retake', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          child: RotatedBox(
+            quarterTurns: draft.rotationTurns,
+            child: DocumentScanBeam(
+              trigger: _scanTrigger,
+              imagePath: draft.imagePath,
+              previousImagePath: _previousPath ?? draft.rawPath,
+              duration: const Duration(milliseconds: 1350),
+            ),
           ),
         ),
       ),
@@ -1179,11 +1093,11 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: const Color(0xFFF6F8FB),
+          color: const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(
-            color: _accent.withValues(alpha: 0.65),
-            width: 1.5,
+            color: _accent.withValues(alpha: 0.55),
+            width: 1.2,
           ),
         ),
         child: Center(
@@ -1191,8 +1105,8 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               Container(
-                width: 38,
-                height: 38,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
                   color: _accent.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
@@ -1200,25 +1114,25 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                 child: const Icon(
                   Icons.add_a_photo_outlined,
                   color: _accent,
-                  size: 20,
+                  size: 16,
                 ),
               ),
-              const SizedBox(height: 7),
+              const SizedBox(height: 5),
               const Text(
                 '+ Scan Back Side',
                 style: TextStyle(
                   color: Color(0xFF1E242B),
                   fontWeight: FontWeight.w700,
-                  fontSize: 12.5,
+                  fontSize: 11,
                   letterSpacing: 0.2,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 1),
               const Text(
-                'Tap here to capture back side',
+                'Tap here to capture',
                 style: TextStyle(
-                  color: Colors.black45,
-                  fontSize: 10,
+                  color: Colors.black38,
+                  fontSize: 8.5,
                   fontWeight: FontWeight.w500,
                 ),
               ),

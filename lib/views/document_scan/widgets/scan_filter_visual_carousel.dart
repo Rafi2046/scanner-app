@@ -124,12 +124,19 @@ class _FilterCard extends StatelessWidget {
           badgeLabel: 'RAW',
           hasNaturalShadow: true,
         ),
-      ScanFilter.color => _renderDocPaper(
+      ScanFilter.magicEnhance => _renderDocPaper(
           background: Colors.white,
           inkColor: const Color(0xFF161A20),
           badgeColor: accent,
           badgeLabel: 'MAGIC',
           isColorAi: true,
+        ),
+      ScanFilter.vivid => _renderDocPaper(
+          background: Colors.white,
+          inkColor: const Color(0xFF0F172A),
+          badgeColor: const Color(0xFFFF2D55),
+          badgeLabel: 'VIVID',
+          isVivid: true,
         ),
       ScanFilter.noShadow => _renderDocPaper(
           background: const Color(0xFFF8FAFC),
@@ -173,6 +180,7 @@ class _FilterCard extends StatelessWidget {
     required String badgeLabel,
     bool hasNaturalShadow = false,
     bool isColorAi = false,
+    bool isVivid = false,
     bool isPureBw = false,
     bool hasMonoPhoto = false,
   }) {
@@ -203,7 +211,13 @@ class _FilterCard extends StatelessWidget {
                 // Document header: badge
                 Row(
                   children: <Widget>[
-                    if (isColorAi)
+                    if (isVivid)
+                      const Icon(
+                        Icons.palette_rounded,
+                        size: 7,
+                        color: Color(0xFFFF2D55),
+                      )
+                    else if (isColorAi)
                       const Icon(
                         Icons.auto_awesome,
                         size: 7,
@@ -260,6 +274,17 @@ class _FilterCard extends StatelessWidget {
                           ],
                         ),
                       ),
+                    ],
+                  )
+                else if (isVivid)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      _line(const Color(0xFFFF2D55), 26),
+                      const SizedBox(height: 1.8),
+                      _line(const Color(0xFF007AFF), 36),
+                      const SizedBox(height: 1.8),
+                      _line(inkColor.withValues(alpha: 0.75), 28),
                     ],
                   )
                 else if (isColorAi)

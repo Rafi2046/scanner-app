@@ -30,12 +30,12 @@ class PdfService {
       img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
 
       // ISO/IEC 7810 ID-1 standard card: 85.6mm x 53.98mm (ratio 1.586)
-      // Takes ~76.4% of A4 width with balanced photocopier proportions
-      const int targetCardW = 1080;
-      const int targetCardH = 681;
-      const int cornerRadius = 38; // Proportional ~3.5% rounded corners
+      // Takes 58.0% of A4 width with generous, clean photocopier margins (Image 2 style)
+      const int targetCardW = 820;
+      const int targetCardH = 517;
+      const int cornerRadius = 28; // Standard card corner radius
 
-      final int dstX = ((a4Width - targetCardW) / 2).round();
+      final int dstX = ((a4Width - targetCardW) / 2).round(); // 297px left and right margin
 
       final img.Image? frontRaw = img.decodeImage(File(frontImagePath).readAsBytesSync());
       if (frontRaw != null) {
@@ -47,7 +47,7 @@ class PdfService {
           interpolation: img.Interpolation.linear,
         );
         final int frontY = (backImagePath != null && backImagePath.isNotEmpty)
-            ? 195
+            ? 320
             : ((a4Height - targetCardH) / 2).round();
         _drawRoundedCard(
           dst: canvas,
@@ -72,7 +72,7 @@ class PdfService {
             dst: canvas,
             src: backResized,
             dstX: dstX,
-            dstY: 1065,
+            dstY: 1163,
             radius: cornerRadius,
           );
         }
