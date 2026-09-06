@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
@@ -51,24 +52,24 @@ Uint8List rotateJpegBytesIsolate(({
 }
 
 /// CamScanner "Magic Enhance" (Color Document):
-/// Background illumination division + contrast stretch + saturation boost + unsharp mask sharpening.
+/// Safe background leveling + contrast stretch + subtle sharpening preserving genuine colors.
 img.Image _magicColorFilter(img.Image src) {
   final img.Image enhanced = _processDocument(
     src,
-    blackCut: 0.44,
-    whiteCut: 0.88,
+    blackCut: 0.25,
+    whiteCut: 0.92,
     isColor: true,
-    boostSaturation: true,
+    boostSaturation: false,
   );
-  return _unsharpMaskDart(enhanced, amount: 0.45);
+  return _unsharpMaskDart(enhanced, amount: 0.20);
 }
 
 /// CamScanner "No Shadow": Soft shadow flattening, preserving fine handwriting and stamps.
 img.Image _noShadowFilter(img.Image src) {
   return _processDocument(
     src,
-    blackCut: 0.36,
-    whiteCut: 0.84,
+    blackCut: 0.32,
+    whiteCut: 0.82,
     isColor: true,
     boostSaturation: false,
   );
@@ -188,15 +189,16 @@ img.Image _processDocument(
       if (ratio >= whiteCut) {
         targetLuma = 255.0;
       } else if (ratio <= blackCut) {
-        targetLuma = (ratio / blackCut) * 26.0;
+        targetLuma = (ratio / blackCut) * 8.0;
       } else {
         final double t = (ratio - blackCut) / (whiteCut - blackCut);
         final double curve = t * t * (3.0 - 2.0 * t);
-        targetLuma = 26.0 + curve * (255.0 - 26.0);
+        targetLuma = 8.0 + curve * (255.0 - 8.0);
       }
 
       if (isColor) {
-        final double gain = curLuma > 0 ? (targetLuma / curLuma) : 1.0;
+        final double rawGain = curLuma > 0 ? (targetLuma / curLuma) : 1.0;
+        final double gain = rawGain.clamp(0.85, 1.30);
         final img.Pixel p = src.getPixel(x, y);
         double r = p.r * gain;
         double g = p.g * gain;
@@ -204,7 +206,7 @@ img.Image _processDocument(
 
         if (boostSaturation) {
           final double finalLuma = 0.299 * r + 0.587 * g + 0.114 * b;
-          const double satFactor = 1.25;
+          const double satFactor = 1.08;
           r = finalLuma + (r - finalLuma) * satFactor;
           g = finalLuma + (g - finalLuma) * satFactor;
           b = finalLuma + (b - finalLuma) * satFactor;
@@ -279,6 +281,12 @@ Float32List _estimateBackgroundGrid(Uint8List luma, int w, int h, int gridCols, 
   final int cellH = (h / gridRows).ceil();
   final Float32List bgGrid = Float32List(gridCols * gridRows);
 
+  int globalMaxL = 0;
+  for (int i = 0; i < luma.length; i += 8) {
+    if (luma[i] > globalMaxL) globalMaxL = luma[i];
+  }
+  final double floorBg = math.max(globalMaxL * 0.70, 140.0);
+
   for (int gy = 0; gy < gridRows; gy++) {
     final int startY = gy * cellH;
     final int endY = (startY + cellH).clamp(0, h);
@@ -310,7 +318,7 @@ Float32List _estimateBackgroundGrid(Uint8List luma, int w, int h, int gridCols, 
       }
 
       final double cellBg = countHigh > 0 ? (sumHigh / countHigh) : (maxL > 0 ? maxL.toDouble() : 180.0);
-      bgGrid[gy * gridCols + gx] = cellBg.clamp(30.0, 255.0);
+      bgGrid[gy * gridCols + gx] = math.max(cellBg, floorBg).clamp(floorBg, 255.0);
     }
   }
 

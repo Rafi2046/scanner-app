@@ -118,5 +118,48 @@ void main() {
       await tester.pump();
       expect(madeItNow, isTrue);
     });
+
+    testWidgets('renders unique mockups for each of the 8 categories', (
+      WidgetTester tester,
+    ) async {
+      final Map<IdCardCategory, String> expectedTexts = <IdCardCategory, String>{
+        IdCardCategory.general: 'IDENTIFICATION DOCUMENT',
+        IdCardCategory.driverLicense: 'STATE DRIVER LICENSE',
+        IdCardCategory.idCard: 'NATIONAL IDENTITY CARD',
+        IdCardCategory.passport: 'PASSPORT / PASSEPORT',
+        IdCardCategory.bankCard: 'PLATINUM ELITE',
+        IdCardCategory.certificate: 'CERTIFICATE OF ACHIEVEMENT',
+        IdCardCategory.ssn: 'SOCIAL SECURITY',
+        IdCardCategory.autoInsurance: 'STATE MOTOR VEHICLE INSURANCE ID',
+      };
+
+      for (final MapEntry<IdCardCategory, String> entry in expectedTexts.entries) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: IdCardTypeSelectorView(
+                selectedCategory: entry.key,
+                onCategorySelected: (_) {},
+                onMakeItNow: () {},
+                onClose: () {},
+                onToggleFlash: () {},
+                isFlashOn: false,
+                tabMode: ScanTabMode.idCards,
+                onTabModeChanged: (_) {},
+                onOpenFeatures: () {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(entry.value),
+          findsOneWidget,
+          reason: 'Expected distinct text for ${entry.key.title}',
+        );
+      }
+    });
   });
 }
+

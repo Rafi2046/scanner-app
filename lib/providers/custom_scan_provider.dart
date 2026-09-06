@@ -93,6 +93,37 @@ class CustomScanNotifier extends _$CustomScanNotifier {
     final int idx = state.currentPageIndex;
     if (idx < 0 || idx >= state.pages.length) return;
 
+    if (state.mode == CustomScanMode.idCard) {
+      state = state.copyWith(selectedFilter: filter, clearError: true);
+      try {
+        final List<ScanPageDraft> updatedPages = <ScanPageDraft>[];
+        for (final ScanPageDraft p in state.pages) {
+          final String raw = p.rawPath ?? p.imagePath;
+          final String cacheKey = '${raw}_${filter.name}';
+          String processed;
+          if (_filterCache.containsKey(cacheKey)) {
+            processed = _filterCache[cacheKey]!;
+          } else {
+            processed = await ref.read(scanEnhanceServiceProvider).applyFilter(raw, filter);
+            _filterCache[cacheKey] = processed;
+          }
+          updatedPages.add(p.copyWith(imagePath: processed, filter: filter));
+        }
+        final String? activeWarped = updatedPages.isNotEmpty
+            ? updatedPages[state.currentPageIndex.clamp(0, updatedPages.length - 1)].imagePath
+            : null;
+        state = state.copyWith(
+          pages: updatedPages,
+          selectedFilter: filter,
+          warpedPath: activeWarped,
+          clearError: true,
+        );
+      } catch (error) {
+        state = state.copyWith(error: error);
+      }
+      return;
+    }
+
     final ScanPageDraft curPage = state.pages[idx];
     final String raw = curPage.rawPath ?? curPage.imagePath;
     final String cacheKey = '${raw}_${filter.name}';
@@ -198,8 +229,15 @@ class CustomScanNotifier extends _$CustomScanNotifier {
   }
 
   void goToCrop() {
+    String? path = state.pendingPath;
+    if (path == null && state.pages.isNotEmpty) {
+      final int idx = state.currentPageIndex.clamp(0, state.pages.length - 1);
+      final ScanPageDraft cur = state.pages[idx];
+      path = cur.rawPath ?? cur.imagePath;
+    }
     state = state.copyWith(
       step: CustomScanStep.crop,
+      pendingPath: path,
       clearWarped: true,
       clearRotation: true,
       clearError: true,
@@ -407,36 +445,52 @@ class CustomScanNotifier extends _$CustomScanNotifier {
         ? state.documentTitle!.trim()
         : FileNameUtils.stamped(state.idCategory.title);
 
+    final String cacheDir = (await getTemporaryDirectory()).path;
     final String pdfPath = p.join(
-      (await getTemporaryDirectory()).path,
+      cacheDir,
       FileNameUtils.withExtension(FileNameUtils.stamped(prefix.toLowerCase()), 'pdf'),
+    );
+    final String compositeImgPath = p.join(
+      cacheDir,
+      FileNameUtils.withExtension('composite_${FileNameUtils.stamped(prefix.toLowerCase())}', 'jpg'),
     );
 
     if (state.idCategory.isSingleSide) {
+      await ref.read(pdfServiceProvider).createIdCardA4CompositeImage(
+            frontImagePath: front,
+            outputPath: compositeImgPath,
+          );
       await ref.read(pdfServiceProvider).createSingleCardA4(
             imagePath: front,
             outputPath: pdfPath,
+            compositeA4ImagePath: compositeImgPath,
           );
       await ref.read(storageServiceProvider).persistGeneratedPdf(
             kind: DocumentKind.idCard,
             title: docTitle,
             sourcePdfPath: pdfPath,
-            sourceImagePaths: <String>[front],
+            sourceImagePaths: <String>[compositeImgPath],
           );
     } else {
       final String back = state.pages
           .firstWhere((ScanPageDraft p) => p.idSide == IdScanSide.back)
           .imagePath;
+      await ref.read(pdfServiceProvider).createIdCardA4CompositeImage(
+            frontImagePath: front,
+            backImagePath: back,
+            outputPath: compositeImgPath,
+          );
       await ref.read(pdfServiceProvider).createIdCardA4(
             frontImagePath: front,
             backImagePath: back,
             outputPath: pdfPath,
+            compositeA4ImagePath: compositeImgPath,
           );
       await ref.read(storageServiceProvider).persistGeneratedPdf(
             kind: DocumentKind.idCard,
             title: docTitle,
             sourcePdfPath: pdfPath,
-            sourceImagePaths: <String>[front, back],
+            sourceImagePaths: <String>[compositeImgPath],
           );
     }
   }

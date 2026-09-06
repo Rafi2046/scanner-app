@@ -618,34 +618,6 @@ String rotateImageFastSync(({String inputPath, String outputPath, int angle}) ar
   }
 }
 
-/// Extracts a multi-scale paper illumination sheet from [src] to eliminate shadows.
-cv.Mat _extractBackgroundIllumination(cv.Mat src) {
-  final int origW = src.width;
-  final int origH = src.height;
-
-  // 1. Downscale to 360px for fast, robust morphological shadow & lighting extraction
-  const int targetW = 360;
-  final int targetH = ((origH * targetW) / origW).round().clamp(1, 10000);
-  final cv.Mat small = cv.resize(src, (targetW, targetH));
-
-  // 2. Morphological CLOSE wipes text away, isolating the paper illumination and shadows
-  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (13, 13));
-  final cv.Mat closed = cv.morphologyEx(small, cv.MORPH_CLOSE, kernel);
-
-  // 3. Gaussian blur to create smooth illumination transitions
-  final cv.Mat blurred = cv.gaussianBlur(closed, (31, 31), 0);
-
-  // 4. Upscale back to original full resolution
-  final cv.Mat fullBg = cv.resize(blurred, (origW, origH));
-
-  kernel.dispose();
-  closed.dispose();
-  blurred.dispose();
-  small.dispose();
-
-  return fullBg;
-}
-
 /// Fast native OpenCV document filter processing — executed inside [Isolate.run].
 String applyScanFilterFastSync(({
   String inputPath,
@@ -658,16 +630,8 @@ String applyScanFilterFastSync(({
   }
 
   cv.Mat? result;
-  cv.Mat? bg;
-  cv.Mat? divided;
   cv.Mat? temp1;
   cv.Mat? temp2;
-  cv.Mat? hsv;
-  cv.VecMat? channels;
-  cv.Mat? satBoosted;
-  cv.VecMat? newChannels;
-  cv.Mat? hsvBoosted;
-  cv.Mat? bgrColor;
   cv.Mat? blurMask;
 
   try {
@@ -678,95 +642,103 @@ String applyScanFilterFastSync(({
 
       case 'magicEnhance':
       case 'color':
-        // CAMSCANNER "MAGIC ENHANCE" (COLOR DOCUMENT):
-        // 1. Background Normalization: Optical illumination division normalizes
-        // paper to pure uniform white and eliminates all shadows and fold creases.
-        bg = _extractBackgroundIllumination(src);
-        divided = cv.divide(src, bg, scale: 255);
+        // CAMSCANNER "MAGIC ENHANCE" (6-STAGE TRUE-COLOR PIPELINE):
+        // 1. Bilateral Denoising: Preserves text edges while eliminating CMOS sensor noise
+        final cv.Mat denoised = cv.bilateralFilter(src, 7, 50, 50);
 
-        // 2. Contrast Stretching: Linear stretching sharpens text contrast and clears paper haze.
-        temp1 = cv.convertScaleAbs(divided, alpha: 1.22, beta: 6);
+        // 2. LAB Color Space: Separates Luminance (L) from Chrominance (A: green-red, B: blue-yellow)
+        final cv.Mat lab = cv.cvtColor(denoised, cv.COLOR_BGR2Lab);
+        final cv.VecMat labChannels = cv.split(lab);
 
-        // 3. Saturation Boost: Convert to HSV, boost Saturation channel by 25% to make
-        // colored logos, signatures, and stamps vivid and punchy.
-        hsv = cv.cvtColor(temp1, cv.COLOR_BGR2HSV);
-        channels = cv.split(hsv);
-        satBoosted = cv.convertScaleAbs(channels[1], alpha: 1.25, beta: 0);
-        newChannels = cv.VecMat.fromList(<cv.Mat>[
-          channels[0],
-          satBoosted,
-          channels[2],
+        // 3. CLAHE on L channel only: Equalizes local illumination gradients without shifting colors,
+        // preventing yellow burn halos on seals/emblems and preserving natural skin tones.
+        final cv.CLAHE clahe = cv.createCLAHE(clipLimit: 2.0, tileGridSize: (8, 8));
+        final cv.Mat lEnhanced = clahe.apply(labChannels[0]);
+        final cv.VecMat mergedLab = cv.VecMat.fromList(<cv.Mat>[
+          lEnhanced,
+          labChannels[1],
+          labChannels[2],
         ]);
-        hsvBoosted = cv.merge(newChannels);
-        bgrColor = cv.cvtColor(hsvBoosted, cv.COLOR_HSV2BGR);
+        final cv.Mat colorLab = cv.cvtColor(cv.merge(mergedLab), cv.COLOR_Lab2BGR);
 
-        // 4. Unsharp Mask: Enhances high-frequency edge gradients to eliminate minor lens blur.
-        blurMask = cv.gaussianBlur(bgrColor, (3, 3), 0);
-        result = cv.addWeighted(bgrColor, 1.45, blurMask, -0.45, 0);
+        // 4. Subtle Ink Contrast (alpha: 1.06, beta: 0 - zero destructive channel clipping)
+        temp1 = cv.convertScaleAbs(colorLab, alpha: 1.06, beta: 0);
+
+        // 5. Unsharp Mask: Enhances high-frequency edge gradients for razor-sharp Bengali/English legibility
+        blurMask = cv.gaussianBlur(temp1, (0, 0), 2.0);
+        result = cv.addWeighted(temp1, 1.35, blurMask, -0.35, 0);
+
+        denoised.dispose();
+        lab.dispose();
+        labChannels.dispose();
+        clahe.dispose();
+        lEnhanced.dispose();
+        mergedLab.dispose();
+        colorLab.dispose();
         break;
 
       case 'bw':
       case 'bwPrint':
-        // CAMSCANNER "BW PRINT" (PRINT-READY BLACK & WHITE):
-        // 1. Grayscale conversion
-        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
-
-        // 2. Optical background division on grayscale to erase shadows across the sheet
-        bg = _extractBackgroundIllumination(temp1);
-        divided = cv.divide(temp1, bg, scale: 255);
-
-        // 3. Pre-threshold smoothing: 3x3 Gaussian suppresses camera sensor CMOS noise & halftone dots
-        temp2 = cv.gaussianBlur(divided, (3, 3), 0);
-
-        // 4. Adaptive Gaussian Thresholding: Evaluates local pixel neighborhood for clean, solid black text
-        // on pure 255 white paper even if lighting was severely uneven.
+        // CAMSCANNER "BW PRINT" (ADAPTIVE THRESHOLD PHOTOCOPY):
+        final cv.Mat denoisedBw = cv.bilateralFilter(src, 7, 50, 50);
+        final cv.Mat grayBw = cv.cvtColor(denoisedBw, cv.COLOR_BGR2GRAY);
         result = cv.adaptiveThreshold(
-          temp2,
+          grayBw,
           255,
           cv.ADAPTIVE_THRESH_GAUSSIAN_C,
           cv.THRESH_BINARY,
           25,
-          11.0,
+          15.0,
         );
+        denoisedBw.dispose();
+        grayBw.dispose();
         break;
 
       case 'grayscale':
         // CAMSCANNER "GRAYSCALE" (SMOOTH MONOCHROME WITH PHOTOS/SEALS):
-        // 1. Grayscale conversion
-        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
-
-        // 2. Background illumination normalization
-        bg = _extractBackgroundIllumination(temp1);
-        divided = cv.divide(temp1, bg, scale: 255);
-
-        // 3. Moderate contrast bump: preserves smooth mid-tone gradients for photos and seals
-        temp2 = cv.convertScaleAbs(divided, alpha: 1.25, beta: -5);
-
-        // 4. Subtle unsharp mask for crisp text and line art
-        blurMask = cv.gaussianBlur(temp2, (3, 3), 0);
-        result = cv.addWeighted(temp2, 1.25, blurMask, -0.25, 0);
+        final cv.Mat denoisedGray = cv.bilateralFilter(src, 7, 50, 50);
+        temp1 = cv.cvtColor(denoisedGray, cv.COLOR_BGR2GRAY);
+        final cv.CLAHE claheGray = cv.createCLAHE(clipLimit: 2.0, tileGridSize: (8, 8));
+        temp2 = claheGray.apply(temp1);
+        blurMask = cv.gaussianBlur(temp2, (0, 0), 2.0);
+        result = cv.addWeighted(temp2, 1.30, blurMask, -0.30, 0);
+        denoisedGray.dispose();
+        claheGray.dispose();
         break;
 
       case 'lighten':
-        // LIGHTEN: Noticeably brightens paper, clears shadows, gives soft studio light box look
-        bg = _extractBackgroundIllumination(src);
-        divided = cv.divide(src, bg, scale: 255);
-        result = cv.convertScaleAbs(divided, alpha: 1.08, beta: 16);
+        // LIGHTEN: Brightens image, clears light shadows, studio light box look
+        final cv.Mat denoisedLt = cv.bilateralFilter(src, 5, 35, 35);
+        result = cv.convertScaleAbs(denoisedLt, alpha: 1.15, beta: 15);
+        denoisedLt.dispose();
         break;
 
       case 'noShadow':
-        // NO SHADOW: Soft background leveling preserving delicate pencil & stamps
-        bg = _extractBackgroundIllumination(src);
-        divided = cv.divide(src, bg, scale: 255);
-        result = cv.convertScaleAbs(divided, alpha: 1.12, beta: 4);
+        // NO SHADOW: Soft background leveling preserving delicate pencil, stamps, and signatures
+        final cv.Mat denoisedNs = cv.bilateralFilter(src, 7, 40, 40);
+        final cv.Mat labNs = cv.cvtColor(denoisedNs, cv.COLOR_BGR2Lab);
+        final cv.VecMat labChannelsNs = cv.split(labNs);
+        final cv.CLAHE claheNs = cv.createCLAHE(clipLimit: 1.5, tileGridSize: (8, 8));
+        final cv.Mat lEnhancedNs = claheNs.apply(labChannelsNs[0]);
+        final cv.VecMat mergedLabNs = cv.VecMat.fromList(<cv.Mat>[
+          lEnhancedNs,
+          labChannelsNs[1],
+          labChannelsNs[2],
+        ]);
+        result = cv.cvtColor(cv.merge(mergedLabNs), cv.COLOR_Lab2BGR);
+        denoisedNs.dispose();
+        labNs.dispose();
+        labChannelsNs.dispose();
+        claheNs.dispose();
+        lEnhancedNs.dispose();
+        mergedLabNs.dispose();
         break;
 
       case 'invert':
-        // INVERT: White text on dark background for blueprints or high-contrast reading
-        temp1 = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
-        bg = _extractBackgroundIllumination(temp1);
-        divided = cv.divide(temp1, bg, scale: 255);
-        temp2 = cv.gaussianBlur(divided, (3, 3), 0);
+        // INVERT: White text on dark background
+        final cv.Mat denoisedInv = cv.bilateralFilter(src, 7, 50, 50);
+        temp1 = cv.cvtColor(denoisedInv, cv.COLOR_BGR2GRAY);
+        temp2 = cv.gaussianBlur(temp1, (3, 3), 0);
         result = cv.adaptiveThreshold(
           temp2,
           255,
@@ -775,6 +747,7 @@ String applyScanFilterFastSync(({
           25,
           11.0,
         );
+        denoisedInv.dispose();
         break;
 
       default:
@@ -788,16 +761,8 @@ String applyScanFilterFastSync(({
     return args.outputPath;
   } finally {
     blurMask?.dispose();
-    bgrColor?.dispose();
-    hsvBoosted?.dispose();
-    newChannels?.dispose();
-    satBoosted?.dispose();
-    channels?.dispose();
-    hsv?.dispose();
     temp1?.dispose();
     temp2?.dispose();
-    divided?.dispose();
-    bg?.dispose();
     result?.dispose();
     src.dispose();
   }

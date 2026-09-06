@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scanner_app/core/enums/custom_scan_mode.dart';
+import 'package:scanner_app/core/enums/id_scan_side.dart';
 import 'package:scanner_app/core/enums/scan_filter.dart';
 import 'package:scanner_app/models/scan_page_draft.dart';
 import 'package:scanner_app/providers/custom_scan_provider.dart';
@@ -34,6 +35,7 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
   int _scanTrigger = 1;
   String? _previousPath;
   int _carouselIndex = 0;
+  int _selectedIdSideIndex = 0;
   double? _baseDocumentAspectRatio;
   String? _lastResolvedPath;
 
@@ -445,17 +447,24 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     final bool isOnAddCard = _carouselIndex >= totalPages;
     final String currentTitle = scan.documentTitle ?? 'CamScanner Document';
 
-    final String activePath = (!isOnAddCard && _carouselIndex < totalPages)
-        ? pages[_carouselIndex].imagePath
+    final bool isIdCardMode = scan.mode == CustomScanMode.idCard;
+
+    final ScanPageDraft? frontDraft = pages.where((ScanPageDraft p) => p.idSide == IdScanSide.front).firstOrNull ??
+        (pages.isNotEmpty ? pages.first : null);
+    final ScanPageDraft? backDraft = pages.where((ScanPageDraft p) => p.idSide == IdScanSide.back).firstOrNull ??
+        (pages.length > 1 ? pages[1] : null);
+
+    final ScanPageDraft? activeDraft = isIdCardMode
+        ? (_selectedIdSideIndex == 1 && backDraft != null ? backDraft : frontDraft)
+        : ((!isOnAddCard && _carouselIndex < totalPages) ? pages[_carouselIndex] : null);
+
+    final String activePath = activeDraft != null
+        ? activeDraft.imagePath
         : (scan.warpedPath ?? (pages.isNotEmpty ? pages.first.imagePath : ''));
 
-    final int activeRotation = (!isOnAddCard && _carouselIndex < totalPages)
-        ? pages[_carouselIndex].rotationTurns
-        : scan.rotationTurns;
+    final int activeRotation = activeDraft?.rotationTurns ?? scan.rotationTurns;
 
-    final ScanFilter activeFilter = (!isOnAddCard && _carouselIndex < totalPages)
-        ? pages[_carouselIndex].filter
-        : scan.selectedFilter;
+    final ScanFilter activeFilter = activeDraft?.filter ?? scan.selectedFilter;
 
     if (activePath.isNotEmpty) {
       _resolveDocumentAspectRatio(activePath);
@@ -551,9 +560,15 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            isOnAddCard
-                                ? 'Add new page'
-                                : 'Page ${_carouselIndex + 1} of $totalPages · Tap to rename',
+                            isIdCardMode
+                                ? (scan.canSaveIdCard
+                                    ? '${scan.idCategory.title} · A4 Sheet Preview'
+                                    : (scan.idCategory.isSingleSide
+                                        ? '${scan.idCategory.title} · A4 Sheet Preview'
+                                        : '${scan.idCategory.title} · Front Saved, Tap Back to Scan'))
+                                : (isOnAddCard
+                                    ? 'Add new page'
+                                    : 'Page ${_carouselIndex + 1} of $totalPages · Tap to rename'),
                             style: const TextStyle(
                               color: Colors.white38,
                               fontSize: 11,
@@ -655,38 +670,47 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
               ),
             ),
 
-            // Document Center Preview Stage: 100% full-screen width PageView
+            // Document Center Preview Stage:
+            // For ID Card: Renders an authentic A4 Paper Stage with Front on top and Back on bottom (Image 2 style).
+            // For Document: Renders 100% full-screen width PageView with swipeable cards.
             Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                physics: const BouncingScrollPhysics(),
-                itemCount: totalPages + 1, // Document Pages + 1 "+ Add Pages" Card
-                onPageChanged: (int index) {
-                  setState(() => _carouselIndex = index);
-                  if (index < totalPages) {
-                    ref.read(customScanNotifierProvider.notifier).selectPage(index);
-                  }
-                },
-                itemBuilder: (BuildContext context, int index) {
-                  final double baseRatio = _baseDocumentAspectRatio ?? (1 / 1.414);
-                  if (index == totalPages) {
-                    final int lastRotation = pages.isNotEmpty ? pages.last.rotationTurns : 0;
-                    final double addPageRatio = (lastRotation % 2 == 1) ? (1.0 / baseRatio) : baseRatio;
-                    return _buildAddPagesCard(scan, addPageRatio);
-                  }
-                  final double pageRatio = (pages[index].rotationTurns % 2 == 1) ? (1.0 / baseRatio) : baseRatio;
-                  return _buildDocumentPageCard(
-                    page: pages[index],
-                    index: index,
-                    totalPages: totalPages,
-                    scanBusy: scan.busy,
-                    aspectRatio: pageRatio,
-                  );
-                },
-              ),
+              child: isIdCardMode
+                  ? _buildIdCardA4Stage(
+                      context: context,
+                      scan: scan,
+                      frontDraft: frontDraft,
+                      backDraft: backDraft,
+                    )
+                  : PageView.builder(
+                      controller: _pageController,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: totalPages + 1, // Document Pages + 1 "+ Add Pages" Card
+                      onPageChanged: (int index) {
+                        setState(() => _carouselIndex = index);
+                        if (index < totalPages) {
+                          ref.read(customScanNotifierProvider.notifier).selectPage(index);
+                        }
+                      },
+                      itemBuilder: (BuildContext context, int index) {
+                        final double baseRatio = _baseDocumentAspectRatio ?? (1 / 1.414);
+                        if (index == totalPages) {
+                          final int lastRotation = pages.isNotEmpty ? pages.last.rotationTurns : 0;
+                          final double addPageRatio = (lastRotation % 2 == 1) ? (1.0 / baseRatio) : baseRatio;
+                          return _buildAddPagesCard(scan, addPageRatio);
+                        }
+                        final double pageRatio = (pages[index].rotationTurns % 2 == 1) ? (1.0 / baseRatio) : baseRatio;
+                        return _buildDocumentPageCard(
+                          page: pages[index],
+                          index: index,
+                          totalPages: totalPages,
+                          scanBusy: scan.busy,
+                          aspectRatio: pageRatio,
+                        );
+                      },
+                    ),
             ),
 
-            // Slender, Minimalist Page Pill (hidden on Add Page card to remove redundant text)
+            // Slender, Minimalist Page Pill / Status Pill (hidden on Add Page card to remove redundant text)
             AnimatedOpacity(
               opacity: isOnAddCard ? 0.0 : 1.0,
               duration: const Duration(milliseconds: 200),
@@ -700,54 +724,68 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.white10, width: 0.8),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      GestureDetector(
-                        onTap: () {
-                          if (_carouselIndex > 0) {
-                            _pageController.previousPage(
-                              duration: const Duration(milliseconds: 250),
-                              curve: Curves.easeInOut,
-                            );
-                          }
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: Icon(
-                          Icons.chevron_left_rounded,
-                          color: _carouselIndex > 0 ? Colors.white70 : Colors.white24,
-                          size: 18,
+                  child: isIdCardMode
+                      ? Text(
+                          scan.canSaveIdCard
+                              ? 'A4 Sheet · Both Sides Ready'
+                              : (scan.idCategory.isSingleSide
+                                  ? 'A4 Sheet · Ready'
+                                  : 'Front Scanned · 1 of 2 Sides'),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            GestureDetector(
+                              onTap: () {
+                                if (_carouselIndex > 0) {
+                                  _pageController.previousPage(
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeInOut,
+                                  );
+                                }
+                              },
+                              behavior: HitTestBehavior.opaque,
+                              child: Icon(
+                                Icons.chevron_left_rounded,
+                                color: _carouselIndex > 0 ? Colors.white70 : Colors.white24,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${_carouselIndex + 1} / $totalPages',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () {
+                                if (_carouselIndex < totalPages) {
+                                  _pageController.nextPage(
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeInOut,
+                                  );
+                                }
+                              },
+                              behavior: HitTestBehavior.opaque,
+                              child: Icon(
+                                Icons.chevron_right_rounded,
+                                color: _carouselIndex < totalPages ? Colors.white70 : Colors.white24,
+                                size: 18,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${_carouselIndex + 1} / $totalPages',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      GestureDetector(
-                        onTap: () {
-                          if (_carouselIndex < totalPages) {
-                            _pageController.nextPage(
-                              duration: const Duration(milliseconds: 250),
-                              curve: Curves.easeInOut,
-                            );
-                          }
-                        },
-                        behavior: HitTestBehavior.opaque,
-                        child: Icon(
-                          Icons.chevron_right_rounded,
-                          color: _carouselIndex < totalPages ? Colors.white70 : Colors.white24,
-                          size: 18,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
@@ -787,14 +825,38 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                       // Clean, non-bulky bottom action toolbar
                       ScanEnhanceBottomBar(
                         busy: scan.busy,
-                        pageCount: totalPages,
+                        pageCount: isIdCardMode ? (scan.canSaveIdCard ? 2 : 1) : totalPages,
                         onRetake: () {
-                          ref.read(customScanNotifierProvider.notifier).goToCapture();
+                          if (isIdCardMode) {
+                            if (_selectedIdSideIndex == 1 && backDraft != null) {
+                              ref.read(customScanNotifierProvider.notifier).prepareScanBackSide();
+                            } else {
+                              ref.read(customScanNotifierProvider.notifier).goToCapture();
+                            }
+                          } else {
+                            ref.read(customScanNotifierProvider.notifier).goToCapture();
+                          }
                         },
                         onRotateLeft: () {
+                          if (isIdCardMode) {
+                            final int targetIdx = (_selectedIdSideIndex == 1 && backDraft != null)
+                                ? pages.indexOf(backDraft)
+                                : (frontDraft != null ? pages.indexOf(frontDraft) : 0);
+                            if (targetIdx >= 0) {
+                              ref.read(customScanNotifierProvider.notifier).selectPage(targetIdx);
+                            }
+                          }
                           ref.read(customScanNotifierProvider.notifier).rotateLeft();
                         },
                         onCrop: () {
+                          if (isIdCardMode) {
+                            final int targetIdx = (_selectedIdSideIndex == 1 && backDraft != null)
+                                ? pages.indexOf(backDraft)
+                                : (frontDraft != null ? pages.indexOf(frontDraft) : 0);
+                            if (targetIdx >= 0) {
+                              ref.read(customScanNotifierProvider.notifier).selectPage(targetIdx);
+                            }
+                          }
                           ref.read(customScanNotifierProvider.notifier).goToCrop();
                         },
                         onExtractText: () {
@@ -824,6 +886,344 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds authentic A4 Paper Stage for ID Card mode with Front on top and Back on bottom (Image 2 style).
+  Widget _buildIdCardA4Stage({
+    required BuildContext context,
+    required CustomScanState scan,
+    required ScanPageDraft? frontDraft,
+    required ScanPageDraft? backDraft,
+  }) {
+    return LayoutBuilder(
+      builder: (BuildContext ctx, BoxConstraints constraints) {
+        final double availW = constraints.maxWidth - 24;
+        final double availH = constraints.maxHeight - 12;
+        double sheetW = availW;
+        double sheetH = sheetW * 1.414;
+        if (sheetH > availH) {
+          sheetH = availH;
+          sheetW = sheetH / 1.414;
+        }
+
+        final double cardW = sheetW * 0.80;
+        final double cardH = cardW / 1.586;
+        final double cardRadius = math.max(8.0, cardW * 0.038);
+        final bool isSingleSide = scan.idCategory.isSingleSide;
+
+        return Center(
+          child: Container(
+            width: sheetW,
+            height: sheetH,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: <BoxShadow>[
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  blurRadius: 22,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: isSingleSide
+                ? Center(
+                    child: _buildIdCardSlot(
+                      draft: frontDraft,
+                      width: cardW,
+                      height: cardH,
+                      radius: cardRadius,
+                      label: 'FRONT',
+                      isSelected: _selectedIdSideIndex == 0,
+                      onTap: () {
+                        setState(() => _selectedIdSideIndex = 0);
+                        if (frontDraft != null) {
+                          ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
+                        }
+                      },
+                      onRetake: () {
+                        setState(() => _selectedIdSideIndex = 0);
+                        ref.read(customScanNotifierProvider.notifier).goToCapture();
+                      },
+                      onCrop: () {
+                        setState(() => _selectedIdSideIndex = 0);
+                        if (frontDraft != null) {
+                          ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
+                        }
+                        ref.read(customScanNotifierProvider.notifier).goToCrop();
+                      },
+                    ),
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      _buildIdCardSlot(
+                        draft: frontDraft,
+                        width: cardW,
+                        height: cardH,
+                        radius: cardRadius,
+                        label: 'FRONT',
+                        isSelected: _selectedIdSideIndex == 0,
+                        onTap: () {
+                          setState(() => _selectedIdSideIndex = 0);
+                          if (frontDraft != null) {
+                            ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
+                          }
+                        },
+                        onRetake: () {
+                          setState(() => _selectedIdSideIndex = 0);
+                          ref.read(customScanNotifierProvider.notifier).goToCapture();
+                        },
+                        onCrop: () {
+                          setState(() => _selectedIdSideIndex = 0);
+                          if (frontDraft != null) {
+                            ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
+                          }
+                          ref.read(customScanNotifierProvider.notifier).goToCrop();
+                        },
+                      ),
+                      SizedBox(height: sheetH * 0.065),
+                      backDraft != null
+                          ? _buildIdCardSlot(
+                              draft: backDraft,
+                              width: cardW,
+                              height: cardH,
+                              radius: cardRadius,
+                              label: 'BACK',
+                              isSelected: _selectedIdSideIndex == 1,
+                              onTap: () {
+                                setState(() => _selectedIdSideIndex = 1);
+                                ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(backDraft));
+                              },
+                              onRetake: () {
+                                setState(() => _selectedIdSideIndex = 1);
+                                ref.read(customScanNotifierProvider.notifier).prepareScanBackSide();
+                              },
+                              onCrop: () {
+                                setState(() => _selectedIdSideIndex = 1);
+                                ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(backDraft));
+                                ref.read(customScanNotifierProvider.notifier).goToCrop();
+                              },
+                            )
+                          : _buildIdCardPlaceholder(
+                              context: context,
+                              width: cardW,
+                              height: cardH,
+                              radius: cardRadius,
+                            ),
+                    ],
+                  ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildIdCardSlot({
+    required ScanPageDraft? draft,
+    required double width,
+    required double height,
+    required double radius,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required VoidCallback onRetake,
+    required VoidCallback onCrop,
+  }) {
+    if (draft == null) {
+      return SizedBox(width: width, height: height);
+    }
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(
+            color: isSelected ? _accent : Colors.black.withValues(alpha: 0.14),
+            width: isSelected ? 2.0 : 0.8,
+          ),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.10),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius - 0.5),
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              RotatedBox(
+                quarterTurns: draft.rotationTurns,
+                child: Transform.scale(
+                  scale: 1.03, // Slight 3% zoom crops away any dark desk edge pixels
+                  child: DocumentScanBeam(
+                    trigger: _scanTrigger,
+                    imagePath: draft.imagePath,
+                    previousImagePath: _previousPath ?? draft.rawPath,
+                    duration: const Duration(milliseconds: 1350),
+                  ),
+                ),
+              ),
+
+              // Top-left label badge (FRONT / BACK)
+              Positioned(
+                top: 7,
+                left: 7,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.70),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white24, width: 0.6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (isSelected)
+                        Container(
+                          width: 5,
+                          height: 5,
+                          margin: const EdgeInsets.only(right: 4),
+                          decoration: const BoxDecoration(
+                            color: _accent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      Text(
+                        label,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Bottom-right quick edit chips
+              Positioned(
+                bottom: 6,
+                right: 6,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    GestureDetector(
+                      onTap: onCrop,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          children: <Widget>[
+                            Icon(Icons.crop_rounded, color: Colors.white, size: 12),
+                            SizedBox(width: 3),
+                            Text('Crop', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: onRetake,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Row(
+                          children: <Widget>[
+                            Icon(Icons.refresh_rounded, color: Colors.white, size: 12),
+                            SizedBox(width: 3),
+                            Text('Retake', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIdCardPlaceholder({
+    required BuildContext context,
+    required double width,
+    required double height,
+    required double radius,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        ref.read(customScanNotifierProvider.notifier).prepareScanBackSide();
+      },
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF6F8FB),
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(
+            color: _accent.withValues(alpha: 0.65),
+            width: 1.5,
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.add_a_photo_outlined,
+                  color: _accent,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(height: 7),
+              const Text(
+                '+ Scan Back Side',
+                style: TextStyle(
+                  color: Color(0xFF1E242B),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'Tap here to capture back side',
+                style: TextStyle(
+                  color: Colors.black45,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
