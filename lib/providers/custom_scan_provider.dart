@@ -111,12 +111,16 @@ class CustomScanNotifier extends _$CustomScanNotifier {
         final List<ScanPageDraft> updatedPages = <ScanPageDraft>[];
         for (final ScanPageDraft p in state.pages) {
           final String raw = p.rawPath ?? p.imagePath;
-          final String cacheKey = '${raw}_${filter.name}';
+          final String cacheKey = '${raw}_${filter.name}_id';
           String processed;
           if (_filterCache.containsKey(cacheKey)) {
             processed = _filterCache[cacheKey]!;
           } else {
-            processed = await ref.read(scanEnhanceServiceProvider).applyFilter(raw, filter);
+            processed = await ref.read(scanEnhanceServiceProvider).applyFilter(
+                  raw,
+                  filter,
+                  true,
+                );
             _filterCache[cacheKey] = processed;
           }
           updatedPages.add(p.copyWith(imagePath: processed, filter: filter));
@@ -138,7 +142,8 @@ class CustomScanNotifier extends _$CustomScanNotifier {
 
     final ScanPageDraft curPage = state.pages[idx];
     final String raw = curPage.rawPath ?? curPage.imagePath;
-    final String cacheKey = '${raw}_${filter.name}';
+    final bool forId = state.mode == CustomScanMode.idCard;
+    final String cacheKey = '${raw}_${filter.name}_${forId ? 'id' : 'doc'}';
 
     if (_filterCache.containsKey(cacheKey)) {
       final String cached = _filterCache[cacheKey]!;
@@ -162,6 +167,7 @@ class CustomScanNotifier extends _$CustomScanNotifier {
       final String processed = await ref.read(scanEnhanceServiceProvider).applyFilter(
             raw,
             filter,
+            forId,
           );
       _filterCache[cacheKey] = processed;
 
@@ -343,6 +349,7 @@ class CustomScanNotifier extends _$CustomScanNotifier {
       final String enhanced = await ref.read(scanEnhanceServiceProvider).applyFilter(
             rawWarped,
             ScanFilter.magicEnhance,
+            state.mode == CustomScanMode.idCard,
           );
 
       final ScanPageDraft draft = ScanPageDraft(

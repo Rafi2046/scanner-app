@@ -564,6 +564,64 @@ String rotateImageFastSync(({String inputPath, String outputPath, int angle}) ar
   }
 }
 
+/// CamScanner Magic/Enhance/Eco-style LUT: crush ink, bleach paper hard.
+cv.Mat _buildDocumentScanLut() {
+  final List<int> table = List<int>.generate(256, (int i) {
+    if (i < 45) {
+      return (i * 0.22).round().clamp(0, 255);
+    }
+    if (i < 95) {
+      return (10 + (i - 45) * 0.72).round().clamp(0, 255);
+    }
+    if (i < 140) {
+      return (46 + (i - 95) * 1.55).round().clamp(0, 255);
+    }
+    if (i < 165) {
+      return (116 + (i - 140) * 2.55).round().clamp(0, 255);
+    }
+    // Paper midtones → pure white (CamScanner premium look)
+    return 255;
+  });
+  return cv.Mat.fromList(1, 256, cv.MatType.CV_8UC1, table);
+}
+
+/// Milder whitening curve for No Shadow / Lighten (keep stamps readable).
+cv.Mat _buildSoftPaperLut() {
+  final List<int> table = List<int>.generate(256, (int i) {
+    if (i < 50) {
+      return (i * 0.40).round().clamp(0, 255);
+    }
+    if (i < 130) {
+      return (20 + (i - 50) * 1.05).round().clamp(0, 255);
+    }
+    if (i < 195) {
+      return (104 + (i - 130) * 1.70).round().clamp(0, 255);
+    }
+    return 255;
+  });
+  return cv.Mat.fromList(1, 256, cv.MatType.CV_8UC1, table);
+}
+
+/// Force paper pixels to pure white using adaptive + luminance masks.
+cv.Mat _forcePaperWhite(cv.Mat colorBgr, cv.Mat luma) {
+  final cv.Mat adaptive = cv.adaptiveThreshold(
+    luma,
+    255,
+    cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+    cv.THRESH_BINARY,
+    35,
+    8.0,
+  );
+  final (double _, cv.Mat bright) = cv.threshold(luma, 162, 255, cv.THRESH_BINARY);
+  final cv.Mat paperMask = cv.bitwiseOR(adaptive, bright);
+  final cv.Mat out = colorBgr.clone();
+  out.setTo(cv.Scalar(255, 255, 255), mask: paperMask);
+  adaptive.dispose();
+  bright.dispose();
+  paperMask.dispose();
+  return out;
+}
+
 /// Apple-grade Vivid LUT: Punchy contrast, deep blacks, and brilliant clean highlights.
 cv.Mat _buildVividLut() {
   final List<int> table = List<int>.generate(256, (int i) {
@@ -581,15 +639,20 @@ cv.Mat _buildVividLut() {
 }
 
 /// Fast native OpenCV document filter processing — executed inside [Isolate.run].
+///
+/// [profile]: `document` = scanner paper-white Magic Enhance; `idCard` = mild color clarity.
 String applyScanFilterFastSync(({
   String inputPath,
   String outputPath,
   String filterName,
+  String profile,
 }) args) {
   final cv.Mat src = cv.imread(args.inputPath);
   if (src.isEmpty) {
     throw StateError('Could not read image for filter: ${args.inputPath}');
   }
+
+  final bool idProfile = args.profile == 'idCard';
 
   cv.Mat? result;
   cv.Mat? temp1;
@@ -604,85 +667,144 @@ String applyScanFilterFastSync(({
 
       case 'magicEnhance':
       case 'color':
-        // Premium color scan for ID cards & docs.
-        // No morphology/divide bleach (that washed cards to white).
-        // Pipeline: denoise → mild CLAHE → soft contrast → light vibrance → crisp unsharp.
-        final cv.Mat denoised = cv.bilateralFilter(src, 5, 40, 40);
-        final cv.Mat lab = cv.cvtColor(denoised, cv.COLOR_BGR2Lab);
-        final cv.VecMat labChannels = cv.split(lab);
+        if (idProfile) {
+          // Mild clarity for plastic ID cards (no paper bleach).
+          final cv.Mat denoised = cv.bilateralFilter(src, 5, 40, 40);
+          final cv.Mat lab = cv.cvtColor(denoised, cv.COLOR_BGR2Lab);
+          final cv.VecMat labChannels = cv.split(lab);
+          final cv.CLAHE clahe =
+              cv.createCLAHE(clipLimit: 1.35, tileGridSize: (8, 8));
+          final cv.Mat lEq = clahe.apply(labChannels[0]);
+          final cv.Mat lContrast =
+              cv.convertScaleAbs(lEq, alpha: 1.08, beta: 3);
+          final cv.Mat aCh =
+              cv.convertScaleAbs(labChannels[1], alpha: 1.06, beta: -7.68);
+          final cv.Mat bCh =
+              cv.convertScaleAbs(labChannels[2], alpha: 1.06, beta: -7.68);
+          final cv.VecMat merged = cv.VecMat.fromList(<cv.Mat>[
+            lContrast,
+            aCh,
+            bCh,
+          ]);
+          final cv.Mat color =
+              cv.cvtColor(cv.merge(merged), cv.COLOR_Lab2BGR);
+          blurMask = cv.gaussianBlur(color, (0, 0), 0.85);
+          result = cv.addWeighted(color, 1.14, blurMask, -0.14, 0);
+          denoised.dispose();
+          lab.dispose();
+          labChannels.dispose();
+          clahe.dispose();
+          lEq.dispose();
+          lContrast.dispose();
+          aCh.dispose();
+          bCh.dispose();
+          merged.dispose();
+          color.dispose();
+        } else {
+          // CamScanner Magic/Enhance/Eco: kill shadows, bleach paper white, deep ink.
+          final cv.Mat denoised = cv.bilateralFilter(src, 5, 40, 40);
+          final cv.Mat lab = cv.cvtColor(denoised, cv.COLOR_BGR2Lab);
+          final cv.VecMat labChannels = cv.split(lab);
+          final cv.Mat lChannel = labChannels[0];
 
-        final cv.CLAHE clahe =
-            cv.createCLAHE(clipLimit: 1.35, tileGridSize: (8, 8));
-        final cv.Mat lEq = clahe.apply(labChannels[0]);
-        final cv.Mat lContrast =
-            cv.convertScaleAbs(lEq, alpha: 1.08, beta: 3);
+          final int ksize =
+              (math.max(src.cols, src.rows) * 0.18).round().clamp(31, 151) | 1;
+          final cv.Mat kernel =
+              cv.getStructuringElement(cv.MORPH_ELLIPSE, (ksize, ksize));
+          final cv.Mat bg =
+              cv.morphologyEx(lChannel, cv.MORPH_DILATE, kernel);
+          final cv.Mat bgBlur = cv.gaussianBlur(bg, (ksize, ksize), 0);
+          final cv.Mat lDivided =
+              cv.divide(lChannel, bgBlur, scale: 255.0);
 
-        // Keep card artwork colors; tiny vibrance only
-        final cv.Mat aCh =
-            cv.convertScaleAbs(labChannels[1], alpha: 1.06, beta: -7.68);
-        final cv.Mat bCh =
-            cv.convertScaleAbs(labChannels[2], alpha: 1.06, beta: -7.68);
+          final int gridW = (src.cols ~/ 22).clamp(8, 16);
+          final int gridH = (src.rows ~/ 22).clamp(8, 16);
+          final cv.CLAHE clahe = cv.createCLAHE(
+            clipLimit: 2.6,
+            tileGridSize: (gridW, gridH),
+          );
+          final cv.Mat lEq = clahe.apply(lDivided);
 
-        final cv.VecMat merged = cv.VecMat.fromList(<cv.Mat>[
-          lContrast,
-          aCh,
-          bCh,
-        ]);
-        final cv.Mat color =
-            cv.cvtColor(cv.merge(merged), cv.COLOR_Lab2BGR);
+          final cv.Mat lut = _buildDocumentScanLut();
+          final cv.Mat lFinal = cv.LUT(lEq, lut);
 
-        blurMask = cv.gaussianBlur(color, (0, 0), 0.85);
-        result = cv.addWeighted(color, 1.14, blurMask, -0.14, 0);
+          // Kill paper color cast; keep light stamp tint only on ink regions.
+          final cv.Mat aCh =
+              cv.convertScaleAbs(labChannels[1], alpha: 0.55, beta: 57.6);
+          final cv.Mat bCh =
+              cv.convertScaleAbs(labChannels[2], alpha: 0.55, beta: 57.6);
 
-        denoised.dispose();
-        lab.dispose();
-        labChannels.dispose();
-        clahe.dispose();
-        lEq.dispose();
-        lContrast.dispose();
-        aCh.dispose();
-        bCh.dispose();
-        merged.dispose();
-        color.dispose();
+          final cv.VecMat merged = cv.VecMat.fromList(<cv.Mat>[
+            lFinal,
+            aCh,
+            bCh,
+          ]);
+          final cv.Mat color =
+              cv.cvtColor(cv.merge(merged), cv.COLOR_Lab2BGR);
+
+          final cv.Mat bleached = _forcePaperWhite(color, lFinal);
+          blurMask = cv.gaussianBlur(bleached, (0, 0), 0.55);
+          result = cv.addWeighted(bleached, 1.42, blurMask, -0.42, 0);
+
+          denoised.dispose();
+          lab.dispose();
+          labChannels.dispose();
+          kernel.dispose();
+          bg.dispose();
+          bgBlur.dispose();
+          lDivided.dispose();
+          clahe.dispose();
+          lEq.dispose();
+          lut.dispose();
+          lFinal.dispose();
+          aCh.dispose();
+          bCh.dispose();
+          merged.dispose();
+          color.dispose();
+          bleached.dispose();
+        }
         break;
 
       case 'vivid':
-        // APPLE-GRADE VIVID FILTER:
-        final cv.Mat denoisedVivid = cv.bilateralFilter(src, 7, 35, 35);
+        // CamScanner-adjacent Vivid: flat paper + punchy color + deep ink.
+        final cv.Mat denoisedVivid = cv.bilateralFilter(src, 5, 35, 35);
         final cv.Mat labVivid = cv.cvtColor(denoisedVivid, cv.COLOR_BGR2Lab);
         final cv.VecMat labChs = cv.split(labVivid);
         final cv.Mat lChVivid = labChs[0];
 
-        // Illumination leveling
-        final int vKsize = (math.max(src.cols, src.rows) * 0.10).round() | 1;
-        final cv.Mat vKernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (vKsize, vKsize));
+        final int vKsize =
+            (math.max(src.cols, src.rows) * 0.16).round().clamp(31, 151) | 1;
+        final cv.Mat vKernel =
+            cv.getStructuringElement(cv.MORPH_ELLIPSE, (vKsize, vKsize));
         final cv.Mat vBg = cv.morphologyEx(lChVivid, cv.MORPH_DILATE, vKernel);
         final cv.Mat vBgBlur = cv.gaussianBlur(vBg, (vKsize, vKsize), 0);
-        final cv.Mat vDivided = cv.divide(lChVivid, vBgBlur, scale: 248.0);
+        final cv.Mat vDivided = cv.divide(lChVivid, vBgBlur, scale: 255.0);
 
-        final int vGridW = (src.cols ~/ 28).clamp(10, 20);
-        final int vGridH = (src.rows ~/ 28).clamp(10, 20);
-        final cv.CLAHE claheVivid = cv.createCLAHE(clipLimit: 2.0, tileGridSize: (vGridW, vGridH));
+        final int vGridW = (src.cols ~/ 24).clamp(10, 18);
+        final int vGridH = (src.rows ~/ 24).clamp(10, 18);
+        final cv.CLAHE claheVivid =
+            cv.createCLAHE(clipLimit: 2.4, tileGridSize: (vGridW, vGridH));
         final cv.Mat lVividEq = claheVivid.apply(vDivided);
 
-        // Vivid Deep Ink LUT
         final cv.Mat vLut = _buildVividLut();
         final cv.Mat lVividFinal = cv.LUT(lVividEq, vLut);
 
-        // Apple Vibrance (+26% on A & B around neutral 128)
-        final cv.Mat aVivid = cv.convertScaleAbs(labChs[1], alpha: 1.26, beta: -33.28);
-        final cv.Mat bVivid = cv.convertScaleAbs(labChs[2], alpha: 1.26, beta: -33.28);
+        final cv.Mat aVivid =
+            cv.convertScaleAbs(labChs[1], alpha: 1.22, beta: -28.16);
+        final cv.Mat bVivid =
+            cv.convertScaleAbs(labChs[2], alpha: 1.22, beta: -28.16);
 
         final cv.VecMat mergedVivid = cv.VecMat.fromList(<cv.Mat>[
           lVividFinal,
           aVivid,
           bVivid,
         ]);
-        final cv.Mat colorVivid = cv.cvtColor(cv.merge(mergedVivid), cv.COLOR_Lab2BGR);
+        final cv.Mat colorVivid =
+            cv.cvtColor(cv.merge(mergedVivid), cv.COLOR_Lab2BGR);
+        final cv.Mat vividBleach = _forcePaperWhite(colorVivid, lVividFinal);
 
-        // Micro-unsharp mask
-        blurMask = cv.gaussianBlur(colorVivid, (0, 0), 0.75);
-        result = cv.addWeighted(colorVivid, 1.35, blurMask, -0.35, 0);
+        blurMask = cv.gaussianBlur(vividBleach, (0, 0), 0.65);
+        result = cv.addWeighted(vividBleach, 1.38, blurMask, -0.38, 0);
 
         denoisedVivid.dispose();
         labVivid.dispose();
@@ -699,6 +821,7 @@ String applyScanFilterFastSync(({
         bVivid.dispose();
         mergedVivid.dispose();
         colorVivid.dispose();
+        vividBleach.dispose();
         break;
 
       case 'bw':
@@ -720,45 +843,131 @@ String applyScanFilterFastSync(({
 
       case 'grayscale':
       case 'gray':
-        // GRAYSCALE (CLAHE ON DENOISED LUMINANCE WITH ZERO-HALO SMOOTHING):
-        final cv.Mat denoisedGray = cv.bilateralFilter(src, 7, 30, 30);
-        temp1 = cv.cvtColor(denoisedGray, cv.COLOR_BGR2GRAY);
-        final int gGridW = (src.cols ~/ 30).clamp(12, 24);
-        final int gGridH = (src.rows ~/ 30).clamp(12, 24);
-        final cv.CLAHE claheGray = cv.createCLAHE(clipLimit: 1.25, tileGridSize: (gGridW, gGridH));
-        final cv.Mat grayEq = claheGray.apply(temp1);
-        result = cv.convertScaleAbs(grayEq, alpha: 1.06, beta: 4);
+        // CamScanner Grayscale: flatten lighting + white paper + crisp ink.
+        final cv.Mat denoisedGray = cv.bilateralFilter(src, 5, 35, 35);
+        final cv.Mat graySrc = cv.cvtColor(denoisedGray, cv.COLOR_BGR2GRAY);
+        final int gK =
+            (math.max(src.cols, src.rows) * 0.16).round().clamp(31, 151) | 1;
+        final cv.Mat gKernel =
+            cv.getStructuringElement(cv.MORPH_ELLIPSE, (gK, gK));
+        final cv.Mat gBg = cv.morphologyEx(graySrc, cv.MORPH_DILATE, gKernel);
+        final cv.Mat gBgBlur = cv.gaussianBlur(gBg, (gK, gK), 0);
+        final cv.Mat gDiv = cv.divide(graySrc, gBgBlur, scale: 255.0);
+        final int gGridW = (src.cols ~/ 24).clamp(10, 18);
+        final int gGridH = (src.rows ~/ 24).clamp(10, 18);
+        final cv.CLAHE claheGray =
+            cv.createCLAHE(clipLimit: 2.2, tileGridSize: (gGridW, gGridH));
+        final cv.Mat grayEq = claheGray.apply(gDiv);
+        final cv.Mat gLut = _buildSoftPaperLut();
+        final cv.Mat gMapped = cv.LUT(grayEq, gLut);
+        final (double _, cv.Mat gPaper) =
+            cv.threshold(gMapped, 170, 255, cv.THRESH_BINARY);
+        final cv.Mat gOut = gMapped.clone();
+        gOut.setTo(cv.Scalar(255), mask: gPaper);
+        blurMask = cv.gaussianBlur(gOut, (0, 0), 0.55);
+        result = cv.addWeighted(gOut, 1.32, blurMask, -0.32, 0);
         denoisedGray.dispose();
+        graySrc.dispose();
+        gKernel.dispose();
+        gBg.dispose();
+        gBgBlur.dispose();
+        gDiv.dispose();
         claheGray.dispose();
         grayEq.dispose();
+        gLut.dispose();
+        gMapped.dispose();
+        gPaper.dispose();
+        gOut.dispose();
         break;
 
       case 'lighten':
-        // LIGHTEN: Brightens image, clears light shadows, studio light box look
+        // CamScanner Lighten: bright flat paper, gentle ink.
         final cv.Mat denoisedLt = cv.bilateralFilter(src, 5, 35, 35);
-        result = cv.convertScaleAbs(denoisedLt, alpha: 1.15, beta: 15);
+        final cv.Mat labLt = cv.cvtColor(denoisedLt, cv.COLOR_BGR2Lab);
+        final cv.VecMat chLt = cv.split(labLt);
+        final int ltK =
+            (math.max(src.cols, src.rows) * 0.14).round().clamp(31, 121) | 1;
+        final cv.Mat ltKernel =
+            cv.getStructuringElement(cv.MORPH_ELLIPSE, (ltK, ltK));
+        final cv.Mat ltBg =
+            cv.morphologyEx(chLt[0], cv.MORPH_DILATE, ltKernel);
+        final cv.Mat ltBgBlur = cv.gaussianBlur(ltBg, (ltK, ltK), 0);
+        final cv.Mat ltDiv = cv.divide(chLt[0], ltBgBlur, scale: 255.0);
+        final cv.Mat ltLut = _buildSoftPaperLut();
+        final cv.Mat ltL = cv.LUT(ltDiv, ltLut);
+        final cv.Mat ltBright =
+            cv.convertScaleAbs(ltL, alpha: 1.08, beta: 12);
+        final cv.VecMat ltMerged = cv.VecMat.fromList(<cv.Mat>[
+          ltBright,
+          chLt[1],
+          chLt[2],
+        ]);
+        final cv.Mat ltColor =
+            cv.cvtColor(cv.merge(ltMerged), cv.COLOR_Lab2BGR);
+        result = _forcePaperWhite(ltColor, ltBright);
         denoisedLt.dispose();
+        labLt.dispose();
+        chLt.dispose();
+        ltKernel.dispose();
+        ltBg.dispose();
+        ltBgBlur.dispose();
+        ltDiv.dispose();
+        ltLut.dispose();
+        ltL.dispose();
+        ltBright.dispose();
+        ltMerged.dispose();
+        ltColor.dispose();
         break;
 
       case 'noShadow':
-        // NO SHADOW: Soft background leveling preserving delicate pencil, stamps, and signatures
-        final cv.Mat denoisedNs = cv.bilateralFilter(src, 7, 40, 40);
+        // CamScanner No Shadow: strong lighting flatten, moderate whitening.
+        final cv.Mat denoisedNs = cv.bilateralFilter(src, 5, 40, 40);
         final cv.Mat labNs = cv.cvtColor(denoisedNs, cv.COLOR_BGR2Lab);
         final cv.VecMat labChannelsNs = cv.split(labNs);
-        final cv.CLAHE claheNs = cv.createCLAHE(clipLimit: 1.5, tileGridSize: (8, 8));
-        final cv.Mat lEnhancedNs = claheNs.apply(labChannelsNs[0]);
+        final int nsK =
+            (math.max(src.cols, src.rows) * 0.20).round().clamp(41, 161) | 1;
+        final cv.Mat nsKernel =
+            cv.getStructuringElement(cv.MORPH_ELLIPSE, (nsK, nsK));
+        final cv.Mat nsBg =
+            cv.morphologyEx(labChannelsNs[0], cv.MORPH_DILATE, nsKernel);
+        final cv.Mat nsBgBlur = cv.gaussianBlur(nsBg, (nsK, nsK), 0);
+        final cv.Mat nsDiv =
+            cv.divide(labChannelsNs[0], nsBgBlur, scale: 255.0);
+        final cv.CLAHE claheNs =
+            cv.createCLAHE(clipLimit: 1.8, tileGridSize: (12, 12));
+        final cv.Mat nsEq = claheNs.apply(nsDiv);
+        final cv.Mat nsLut = _buildSoftPaperLut();
+        final cv.Mat nsL = cv.LUT(nsEq, nsLut);
+        final cv.Mat nsA =
+            cv.convertScaleAbs(labChannelsNs[1], alpha: 0.75, beta: 32);
+        final cv.Mat nsB =
+            cv.convertScaleAbs(labChannelsNs[2], alpha: 0.75, beta: 32);
         final cv.VecMat mergedLabNs = cv.VecMat.fromList(<cv.Mat>[
-          lEnhancedNs,
-          labChannelsNs[1],
-          labChannelsNs[2],
+          nsL,
+          nsA,
+          nsB,
         ]);
-        result = cv.cvtColor(cv.merge(mergedLabNs), cv.COLOR_Lab2BGR);
+        final cv.Mat nsColor =
+            cv.cvtColor(cv.merge(mergedLabNs), cv.COLOR_Lab2BGR);
+        final cv.Mat nsBleach = _forcePaperWhite(nsColor, nsL);
+        blurMask = cv.gaussianBlur(nsBleach, (0, 0), 0.6);
+        result = cv.addWeighted(nsBleach, 1.28, blurMask, -0.28, 0);
         denoisedNs.dispose();
         labNs.dispose();
         labChannelsNs.dispose();
+        nsKernel.dispose();
+        nsBg.dispose();
+        nsBgBlur.dispose();
+        nsDiv.dispose();
         claheNs.dispose();
-        lEnhancedNs.dispose();
+        nsEq.dispose();
+        nsLut.dispose();
+        nsL.dispose();
+        nsA.dispose();
+        nsB.dispose();
         mergedLabNs.dispose();
+        nsColor.dispose();
+        nsBleach.dispose();
         break;
 
       case 'invert':

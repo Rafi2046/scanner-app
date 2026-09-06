@@ -9,6 +9,7 @@ Uint8List applyScanFilterIsolate(({
   Uint8List bytes,
   String filterName,
   int quality,
+  bool forIdCard,
 }) args) {
   final img.Image? decoded = img.decodeImage(args.bytes);
   if (decoded == null) {
@@ -22,7 +23,8 @@ Uint8List applyScanFilterIsolate(({
 
   final img.Image out = switch (filter) {
     ScanFilter.original => decoded,
-    ScanFilter.magicEnhance => _magicColorFilter(decoded),
+    ScanFilter.magicEnhance =>
+      args.forIdCard ? _magicIdCardFilter(decoded) : _magicDocumentFilter(decoded),
     ScanFilter.vivid => _vividColorFilter(decoded),
     ScanFilter.noShadow => _noShadowFilter(decoded),
     ScanFilter.bw => _bwScanFilter(decoded),
@@ -52,9 +54,29 @@ Uint8List rotateJpegBytesIsolate(({
   );
 }
 
-/// Magic Enhance (Dart fallback): clarity without paper-bleach.
-img.Image _magicColorFilter(img.Image src) {
-  // Avoid heavy background-division (washes ID card whites).
+/// Normal document Magic Enhance → CamScanner white paper + clear ink.
+img.Image _magicDocumentFilter(img.Image src) {
+  final img.Image leveled = _processDocument(
+    src,
+    blackCut: 0.28,
+    whiteCut: 0.78,
+    isColor: true,
+    boostSaturation: false,
+    satFactor: 1.0,
+    maxDelta: 160,
+  );
+  final img.Image punchy = img.adjustColor(
+    leveled,
+    contrast: 1.22,
+    saturation: 0.92,
+    brightness: 1.04,
+  );
+  final img.Image deepInk = _deepenInk(punchy, lumaCut: 95, amount: 0.22);
+  return _unsharpMaskDart(deepInk, amount: 0.55, clampDelta: 22);
+}
+
+/// ID card Magic Enhance → clarity without bleaching artwork.
+img.Image _magicIdCardFilter(img.Image src) {
   final img.Image contrast = img.adjustColor(
     src,
     contrast: 1.10,
@@ -80,15 +102,17 @@ img.Image _vividColorFilter(img.Image src) {
   return _unsharpMaskDart(punchy, amount: 0.32, clampDelta: 18);
 }
 
-/// CamScanner "No Shadow": Soft shadow flattening, preserving fine handwriting and stamps.
+/// CamScanner "No Shadow": Strong shadow flatten + moderate paper whitening.
 img.Image _noShadowFilter(img.Image src) {
-  return _processDocument(
+  final img.Image leveled = _processDocument(
     src,
-    blackCut: 0.32,
-    whiteCut: 0.82,
+    blackCut: 0.30,
+    whiteCut: 0.80,
     isColor: true,
     boostSaturation: false,
+    maxDelta: 150,
   );
+  return _unsharpMaskDart(leveled, amount: 0.30, clampDelta: 14);
 }
 
 /// Pure Black & White (CamScanner bwPrint):
@@ -142,18 +166,26 @@ img.Image _bwScanFilter(img.Image src) {
 img.Image _grayscaleFilter(img.Image src) {
   final img.Image gray = _processDocument(
     src,
-    blackCut: 0.40,
-    whiteCut: 0.88,
+    blackCut: 0.30,
+    whiteCut: 0.80,
     isColor: false,
     boostSaturation: false,
+    maxDelta: 150,
   );
-  return _unsharpMaskDart(gray, amount: 0.25);
+  return _unsharpMaskDart(gray, amount: 0.35, clampDelta: 16);
 }
 
 /// Lightens shadows and boosts brightness while keeping original color palette.
 img.Image _lightenFilter(img.Image src) {
-  final img.Image brightened = img.adjustColor(src, brightness: 1.20, contrast: 1.10);
-  return img.adjustColor(brightened, gamma: 0.90);
+  final img.Image leveled = _processDocument(
+    src,
+    blackCut: 0.34,
+    whiteCut: 0.76,
+    isColor: true,
+    boostSaturation: false,
+    maxDelta: 140,
+  );
+  return img.adjustColor(leveled, brightness: 1.08, contrast: 1.08);
 }
 
 /// Inverted scan: white text on dark background.

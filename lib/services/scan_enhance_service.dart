@@ -35,6 +35,7 @@ class ScanEnhanceService {
   Future<String> applyFilter(
     String sourceImagePath, [
     ScanFilter filter = ScanFilter.magicEnhance,
+    bool forIdCard = false,
   ]) async {
     if (sourceImagePath.isEmpty) {
       throw const ScannerException('No image path provided for enhancement.');
@@ -49,11 +50,13 @@ class ScanEnhanceService {
       return sourceImagePath;
     }
 
+    final String profile = forIdCard ? 'idCard' : 'document';
+
     try {
       final Directory cache = await getTemporaryDirectory();
       final String outPath = p.join(
         cache.path,
-        'scan_fx_${filter.name}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        'scan_fx_${filter.name}_${profile}_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
 
       try {
@@ -64,6 +67,7 @@ class ScanEnhanceService {
               inputPath: sourceImagePath,
               outputPath: outPath,
               filterName: filter.name,
+              profile: profile,
             ),
           ),
         );
@@ -76,6 +80,7 @@ class ScanEnhanceService {
               bytes: bytes,
               filterName: filter.name,
               quality: AppConstants.scanJpegQuality,
+              forIdCard: forIdCard,
             ),
           ),
         );
