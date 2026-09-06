@@ -70,12 +70,13 @@ img.Image _vividColorFilter(img.Image src) {
 img.Image _magicColorFilter(img.Image src) {
   final img.Image enhanced = _processDocument(
     src,
-    blackCut: 0.25,
-    whiteCut: 0.92,
+    blackCut: 0.26,
+    whiteCut: 0.90,
     isColor: true,
-    boostSaturation: false,
+    boostSaturation: true,
   );
-  return _unsharpMaskDart(enhanced, amount: 0.20);
+  final img.Image punchy = img.adjustColor(enhanced, saturation: 1.12, contrast: 1.06);
+  return _unsharpMaskDart(punchy, amount: 0.25);
 }
 
 /// CamScanner "No Shadow": Soft shadow flattening, preserving fine handwriting and stamps.
@@ -211,12 +212,11 @@ img.Image _processDocument(
       }
 
       if (isColor) {
-        final double rawGain = curLuma > 0 ? (targetLuma / curLuma) : 1.0;
-        final double gain = rawGain.clamp(0.85, 1.30);
         final img.Pixel p = src.getPixel(x, y);
-        double r = p.r * gain;
-        double g = p.g * gain;
-        double b = p.b * gain;
+        final double delta = (targetLuma - curLuma).clamp(-120.0, 120.0);
+        double r = (p.r + delta).clamp(0.0, 255.0);
+        double g = (p.g + delta).clamp(0.0, 255.0);
+        double b = (p.b + delta).clamp(0.0, 255.0);
 
         if (boostSaturation) {
           final double finalLuma = 0.299 * r + 0.587 * g + 0.114 * b;
@@ -243,7 +243,7 @@ img.Image _processDocument(
   return dst;
 }
 
-/// Applies an Unsharp Mask filter using a discrete Laplacian edge kernel to sharpen printed text.
+/// Applies a zero-halo high-definition edge enhancement without discrete noise amplification.
 img.Image _unsharpMaskDart(img.Image src, {required double amount}) {
   final int w = src.width;
   final int h = src.height;
@@ -263,14 +263,19 @@ img.Image _unsharpMaskDart(img.Image src, {required double amount}) {
       final img.Pixel lft = src.getPixel(xm1, y);
       final img.Pixel rgt = src.getPixel(xp1, y);
 
-      // Discrete Laplacian high-pass: 4 * center - (top + bottom + left + right)
-      final double lapR = 4.0 * c.r - (top.r + bot.r + lft.r + rgt.r);
-      final double lapG = 4.0 * c.g - (top.g + bot.g + lft.g + rgt.g);
-      final double lapB = 4.0 * c.b - (top.b + bot.b + lft.b + rgt.b);
+      // Smooth 5-point local average
+      final double avgR = (c.r + top.r + bot.r + lft.r + rgt.r) / 5.0;
+      final double avgG = (c.g + top.g + bot.g + lft.g + rgt.g) / 5.0;
+      final double avgB = (c.b + top.b + bot.b + lft.b + rgt.b) / 5.0;
 
-      final int nr = (c.r + amount * lapR).round().clamp(0, 255);
-      final int ng = (c.g + amount * lapG).round().clamp(0, 255);
-      final int nb = (c.b + amount * lapB).round().clamp(0, 255);
+      // High-frequency detail difference, clamped to avoid tearing/halos
+      final double diffR = (c.r - avgR).clamp(-16.0, 16.0);
+      final double diffG = (c.g - avgG).clamp(-16.0, 16.0);
+      final double diffB = (c.b - avgB).clamp(-16.0, 16.0);
+
+      final int nr = (c.r + amount * diffR).round().clamp(0, 255);
+      final int ng = (c.g + amount * diffG).round().clamp(0, 255);
+      final int nb = (c.b + amount * diffB).round().clamp(0, 255);
 
       dst.setPixelRgb(x, y, nr, ng, nb);
     }

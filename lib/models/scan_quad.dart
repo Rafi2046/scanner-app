@@ -30,6 +30,29 @@ class ScanQuad {
     );
   }
 
+  /// Centered card/document framing rectangle used when desk clutter causes ambiguous segmentation.
+  factory ScanQuad.centeredGuideRect({
+    required int width,
+    required int height,
+    double widthFraction = 0.82,
+    double aspectRatio = 1.586,
+  }) {
+    final double cardW = width * widthFraction;
+    final double cardH = cardW / aspectRatio;
+    final double cx = width / 2.0;
+    final double cy = height / 2.0;
+    final double left = cx - (cardW / 2.0);
+    final double right = cx + (cardW / 2.0);
+    final double top = cy - (cardH / 2.0);
+    final double bottom = cy + (cardH / 2.0);
+    return ScanQuad(
+      topLeft: Offset(left.clamp(0.0, width.toDouble()), top.clamp(0.0, height.toDouble())),
+      topRight: Offset(right.clamp(0.0, width.toDouble()), top.clamp(0.0, height.toDouble())),
+      bottomRight: Offset(right.clamp(0.0, width.toDouble()), bottom.clamp(0.0, height.toDouble())),
+      bottomLeft: Offset(left.clamp(0.0, width.toDouble()), bottom.clamp(0.0, height.toDouble())),
+    );
+  }
+
   /// Scales normalized (0..1) quad coordinates to pixel image dimensions.
   factory ScanQuad.fromNormalized(ScanQuad quad, int width, int height) {
     final double w = width.toDouble();

@@ -725,18 +725,65 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                     border: Border.all(color: Colors.white10, width: 0.8),
                   ),
                   child: isIdCardMode
-                      ? Text(
-                          scan.canSaveIdCard
-                              ? 'A4 Sheet · Both Sides Ready'
-                              : (scan.idCategory.isSingleSide
-                                  ? 'A4 Sheet · Ready'
-                                  : 'Front Scanned · 1 of 2 Sides'),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
-                          ),
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            GestureDetector(
+                              onTap: () {
+                                setState(() => _selectedIdSideIndex = 0);
+                                if (frontDraft != null) {
+                                  ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
+                                }
+                              },
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: _selectedIdSideIndex == 0 ? _accent.withValues(alpha: 0.22) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  'Front Side',
+                                  style: TextStyle(
+                                    color: _selectedIdSideIndex == 0 ? _accent : Colors.white60,
+                                    fontSize: 11.5,
+                                    fontWeight: _selectedIdSideIndex == 0 ? FontWeight.w700 : FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (!scan.idCategory.isSingleSide) ...<Widget>[
+                              const SizedBox(width: 4),
+                              Container(width: 1, height: 12, color: Colors.white24),
+                              const SizedBox(width: 4),
+                              GestureDetector(
+                                onTap: () {
+                                  if (backDraft != null) {
+                                    setState(() => _selectedIdSideIndex = 1);
+                                    ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(backDraft));
+                                  } else {
+                                    ref.read(customScanNotifierProvider.notifier).prepareScanBackSide();
+                                  }
+                                },
+                                behavior: HitTestBehavior.opaque,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: _selectedIdSideIndex == 1 ? _accent.withValues(alpha: 0.22) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    backDraft != null ? 'Back Side' : '+ Add Back',
+                                    style: TextStyle(
+                                      color: _selectedIdSideIndex == 1 ? _accent : Colors.white60,
+                                      fontSize: 11.5,
+                                      fontWeight: _selectedIdSideIndex == 1 ? FontWeight.w700 : FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         )
                       : Row(
                           mainAxisSize: MainAxisSize.min,
@@ -909,11 +956,10 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
           sheetW = sheetH / 1.414;
         }
 
-        // Exact 58% card width matching reference photocopy (Image 2)
-        final double cardW = sheetW * 0.58;
+        // Exact 55% card width matching reference photocopy (Image 2)
+        final double cardW = sheetW * 0.55;
         final double cardH = cardW / 1.586;
-        final double cardRadius = math.max(6.0, cardW * 0.035);
-        final double verticalGap = sheetH * 0.14;
+        final double cardRadius = math.max(6.0, cardW * 0.038);
         final bool isSingleSide = scan.idCategory.isSingleSide;
 
         return Center(
@@ -934,22 +980,27 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
             ),
             child: isSingleSide
                 ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Text(
-                            'FRONT SIDE',
-                            style: TextStyle(
-                              color: _selectedIdSideIndex == 0 ? _accent : const Color(0xFF8A939F),
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ),
-                        _buildIdCardSlot(
+                    child: _buildIdCardSlot(
+                      draft: frontDraft,
+                      width: cardW,
+                      height: cardH,
+                      radius: cardRadius,
+                      isSelected: true,
+                      onTap: () {
+                        setState(() => _selectedIdSideIndex = 0);
+                        if (frontDraft != null) {
+                          ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
+                        }
+                      },
+                    ),
+                  )
+                : Stack(
+                    children: <Widget>[
+                      // Front Card (Top, centered horizontally at y = 12.5%):
+                      Positioned(
+                        top: sheetH * 0.125,
+                        left: (sheetW - cardW) / 2,
+                        child: _buildIdCardSlot(
                           draft: frontDraft,
                           width: cardW,
                           height: cardH,
@@ -962,68 +1013,30 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                             }
                           },
                         ),
-                      ],
-                    ),
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          'FRONT SIDE',
-                          style: TextStyle(
-                            color: _selectedIdSideIndex == 0 ? _accent : const Color(0xFF8A939F),
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
                       ),
-                      _buildIdCardSlot(
-                        draft: frontDraft,
-                        width: cardW,
-                        height: cardH,
-                        radius: cardRadius,
-                        isSelected: _selectedIdSideIndex == 0,
-                        onTap: () {
-                          setState(() => _selectedIdSideIndex = 0);
-                          if (frontDraft != null) {
-                            ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
-                          }
-                        },
+                      // Back Card (Bottom, centered horizontally at y = 53.5%):
+                      Positioned(
+                        top: sheetH * 0.535,
+                        left: (sheetW - cardW) / 2,
+                        child: backDraft != null
+                            ? _buildIdCardSlot(
+                                draft: backDraft,
+                                width: cardW,
+                                height: cardH,
+                                radius: cardRadius,
+                                isSelected: _selectedIdSideIndex == 1,
+                                onTap: () {
+                                  setState(() => _selectedIdSideIndex = 1);
+                                  ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(backDraft));
+                                },
+                              )
+                            : _buildIdCardPlaceholder(
+                                context: context,
+                                width: cardW,
+                                height: cardH,
+                                radius: cardRadius,
+                              ),
                       ),
-                      SizedBox(height: verticalGap),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          'BACK SIDE',
-                          style: TextStyle(
-                            color: _selectedIdSideIndex == 1 ? _accent : const Color(0xFF8A939F),
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ),
-                      backDraft != null
-                          ? _buildIdCardSlot(
-                              draft: backDraft,
-                              width: cardW,
-                              height: cardH,
-                              radius: cardRadius,
-                              isSelected: _selectedIdSideIndex == 1,
-                              onTap: () {
-                                setState(() => _selectedIdSideIndex = 1);
-                                ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(backDraft));
-                              },
-                            )
-                          : _buildIdCardPlaceholder(
-                              context: context,
-                              width: cardW,
-                              height: cardH,
-                              radius: cardRadius,
-                            ),
                     ],
                   ),
           ),
@@ -1045,19 +1058,27 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     }
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         width: width,
         height: height,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(
-            color: isSelected ? _accent : Colors.black.withValues(alpha: 0.12),
-            width: isSelected ? 2.0 : 0.8,
+            color: isSelected ? _accent.withValues(alpha: 0.85) : Colors.black.withValues(alpha: 0.10),
+            width: isSelected ? 1.4 : 0.8,
           ),
           boxShadow: <BoxShadow>[
+            if (isSelected)
+              BoxShadow(
+                color: _accent.withValues(alpha: 0.35),
+                blurRadius: 10,
+                spreadRadius: 1.5,
+                offset: const Offset(0, 2),
+              ),
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 6,
+              color: Colors.black.withValues(alpha: isSelected ? 0.12 : 0.07),
+              blurRadius: isSelected ? 8 : 4,
               offset: const Offset(0, 2),
             ),
           ],

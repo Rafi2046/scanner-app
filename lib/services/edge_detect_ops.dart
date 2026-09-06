@@ -18,7 +18,6 @@ DetectCornersResult detectCornersSync(String path) {
 
   cv.Mat? small;
   cv.Mat? gray;
-  cv.Mat? textErased;
   cv.Mat? blurred;
 
   try {
@@ -45,12 +44,8 @@ DetectCornersResult detectCornersSync(String path) {
 
     gray = cv.cvtColor(workImg, cv.COLOR_BGR2GRAY);
 
-    // 1. Text-erasure via morphological closing (9x9 preserves crisp paper corners)
-    final cv.Mat kernelText = cv.getStructuringElement(cv.MORPH_RECT, (9, 9));
-    textErased = cv.morphologyEx(gray, cv.MORPH_CLOSE, kernelText);
-    kernelText.dispose();
-
-    blurred = cv.gaussianBlur(textErased, (5, 5), 1.5);
+    // 1. Gentle Gaussian blur preserves fine card perimeters without bridging nearby desk text
+    blurred = cv.gaussianBlur(gray, (5, 5), 1.2);
 
     // 2. Multi-strategy edge maps for challenging environments (room lights, bright phone screens, shadows)
     final List<cv.Mat> edgeMaps = <cv.Mat>[
@@ -81,16 +76,23 @@ DetectCornersResult detectCornersSync(String path) {
       return (width: origW, height: origH, flat: scaledQuad.toFlat(), isDetected: true);
     }
 
-    // High-margin fallback: 4% inset when paper covers full frame or cannot be segmented
-    final ScanQuad fallback = ScanQuad.insetRect(
-      width: origW,
-      height: origH,
-      insetFraction: 0.04,
-    );
+    // High-accuracy centered document/card framing fallback
+    final ScanQuad fallback = origW < origH
+        ? ScanQuad.centeredGuideRect(
+            width: origW,
+            height: origH,
+            widthFraction: 0.80,
+            aspectRatio: 1.586,
+          )
+        : ScanQuad.centeredGuideRect(
+            width: origW,
+            height: origH,
+            widthFraction: 0.75,
+            aspectRatio: 1.414,
+          );
     return (width: origW, height: origH, flat: fallback.toFlat(), isDetected: false);
   } finally {
     blurred?.dispose();
-    textErased?.dispose();
     gray?.dispose();
     small?.dispose();
     src.dispose();
@@ -105,14 +107,14 @@ cv.Mat _buildAdaptivePaperMask(cv.Mat blur) {
     255,
     cv.ADAPTIVE_THRESH_GAUSSIAN_C,
     cv.THRESH_BINARY,
-    35,
-    7.0,
+    31,
+    8.0,
   );
-  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (7, 7));
-  final cv.Mat closed = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel);
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5));
+  final cv.Mat opened = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel);
   thresh.dispose();
   kernel.dispose();
-  return closed;
+  return opened;
 }
 
 /// Inverted adaptive thresholding catches dark notebook covers or passports on bright tables.
@@ -122,46 +124,42 @@ cv.Mat _buildInvertedAdaptivePaperMask(cv.Mat blur) {
     255,
     cv.ADAPTIVE_THRESH_GAUSSIAN_C,
     cv.THRESH_BINARY_INV,
-    35,
-    7.0,
+    31,
+    8.0,
   );
-  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (7, 7));
-  final cv.Mat closed = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel);
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5));
+  final cv.Mat opened = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel);
   thresh.dispose();
   kernel.dispose();
-  return closed;
+  return opened;
 }
 
 /// Otsu thresholding segments bright paper on dark/medium backgrounds.
 cv.Mat _buildOtsuPaperMask(cv.Mat blur) {
   final (double _, cv.Mat thresh) = cv.threshold(blur, 0, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
-  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (7, 7));
-  final cv.Mat closed = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel);
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5));
+  final cv.Mat opened = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel);
   thresh.dispose();
   kernel.dispose();
-  return closed;
+  return opened;
 }
 
 /// Inverted Otsu segments dark documents or covers on bright desks.
 cv.Mat _buildInvertedOtsuPaperMask(cv.Mat blur) {
   final (double _, cv.Mat thresh) = cv.threshold(blur, 0, 255, cv.THRESH_BINARY_INV | cv.THRESH_OTSU);
-  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (7, 7));
-  final cv.Mat closed = cv.morphologyEx(thresh, cv.MORPH_CLOSE, kernel);
+  final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_RECT, (5, 5));
+  final cv.Mat opened = cv.morphologyEx(thresh, cv.MORPH_OPEN, kernel);
   thresh.dispose();
   kernel.dispose();
-  return closed;
+  return opened;
 }
 
-/// Canny edge detection with dilation bridges perimeter discontinuities.
+/// Canny edge detection with subtle line-dilation to prevent breaking at corners.
 cv.Mat _buildCannyPaperEdges(cv.Mat blur) {
-  final cv.Mat edges = cv.canny(blur, 25, 80);
-  final cv.Mat kernel5 = cv.getStructuringElement(cv.MORPH_RECT, (5, 5));
+  final cv.Mat edges = cv.canny(blur, 35, 110);
   final cv.Mat kernel3 = cv.getStructuringElement(cv.MORPH_RECT, (3, 3));
-  final cv.Mat closed = cv.morphologyEx(edges, cv.MORPH_CLOSE, kernel5);
-  final cv.Mat dilated = cv.dilate(closed, kernel3);
+  final cv.Mat dilated = cv.dilate(edges, kernel3);
   edges.dispose();
-  closed.dispose();
-  kernel5.dispose();
   kernel3.dispose();
   return dilated;
 }
@@ -203,7 +201,7 @@ List<double>? _findBestPaperQuad(
         if (peri < 50) continue;
 
         // Try multiple approximation tolerances for crisp or slightly curved paper edges
-        for (final double eps in <double>[0.015, 0.02, 0.03, 0.04, 0.05, 0.075, 0.10]) {
+        for (final double eps in <double>[0.015, 0.02, 0.025, 0.03, 0.04, 0.05, 0.06, 0.08]) {
           final cv.VecPoint approx = cv.approxPolyDP(contour, eps * peri, true);
           List<Offset>? candidatePts;
 
@@ -212,8 +210,6 @@ List<double>? _findBestPaperQuad(
               for (int k = 0; k < 4; k++)
                 Offset(approx[k].x.toDouble(), approx[k].y.toDouble()),
             ];
-          } else if (approx.length >= 4) {
-            candidatePts = _extractFourCornersFromPoly(approx, width: width, height: height);
           }
           approx.dispose();
 
@@ -227,7 +223,7 @@ List<double>? _findBestPaperQuad(
           // Track largest valid convex quad as safety fallback
           if (qArea >= minArea && qArea <= maxArea && qArea > largestValidArea) {
             final double rect = _evaluateRectangularity(ordered);
-            if (rect >= 0.18) {
+            if (rect >= 0.45) {
               largestValidArea = qArea;
               largestValidQuad = ordered;
             }
@@ -305,29 +301,45 @@ double _scoreCandidateQuad(
   }
   final double borderPenalty = (1.0 - borderTouches * 0.20).clamp(0.2, 1.0);
 
-  // 2. Rectangularity: Corners should be reasonably close to 90 degrees (allows perspective skew)
-  final double rectangularity = _evaluateRectangularity(ord);
-  if (rectangularity < 0.18) return -1.0;
-
-  // 3. Aspect Ratio: Standard books, documents, receipts, cards (0.20 to 4.5)
+  // 2. Edge lengths and Symmetry Check
   final double topW = dist(ord[0], ord[1]);
   final double botW = dist(ord[3], ord[2]);
   final double leftH = dist(ord[0], ord[3]);
   final double rightH = dist(ord[1], ord[2]);
+  if (topW <= 16 || botW <= 16 || leftH <= 16 || rightH <= 16) return -1.0;
+
+  // Opposite sides must have reasonably symmetric lengths under perspective
+  final double topBotRatio = math.min(topW, botW) / math.max(topW, botW);
+  final double leftRightRatio = math.min(leftH, rightH) / math.max(leftH, rightH);
+  if (topBotRatio < 0.65 || leftRightRatio < 0.65) return -1.0;
+
+  // 3. Parallelism Check between opposite sides
+  final Offset topVec = Offset(ord[1].dx - ord[0].dx, ord[1].dy - ord[0].dy);
+  final Offset botVec = Offset(ord[2].dx - ord[3].dx, ord[2].dy - ord[3].dy);
+  final Offset leftVec = Offset(ord[3].dx - ord[0].dx, ord[3].dy - ord[0].dy);
+  final Offset rightVec = Offset(ord[2].dx - ord[1].dx, ord[2].dy - ord[1].dy);
+
+  final double cosTB = ((topVec.dx * botVec.dx) + (topVec.dy * botVec.dy)) / (topW * botW);
+  final double cosLR = ((leftVec.dx * rightVec.dx) + (leftVec.dy * rightVec.dy)) / (leftH * rightH);
+  if (cosTB < 0.78 || cosLR < 0.78) return -1.0;
+
+  // 4. Rectangularity: Corners should be reasonably close to 90 degrees (allows perspective skew)
+  final double rectangularity = _evaluateRectangularity(ord);
+  if (rectangularity < 0.45) return -1.0;
+
+  // 5. Aspect Ratio: Standard books, documents, receipts, cards (0.20 to 4.5)
   final double avgW = (topW + botW) / 2.0;
   final double avgH = (leftH + rightH) / 2.0;
-  if (avgW <= 12 || avgH <= 12) return -1.0;
-
   final double aspect = avgW / avgH;
   if (aspect < 0.20 || aspect > 4.5) return -1.0;
 
   double aspectScore = 1.0;
-  if (aspect >= 0.45 && aspect <= 0.90) {
-    aspectScore = 2.5; // Standard single portrait page (A4, book, document)
-  } else if (aspect > 0.90 && aspect <= 1.30) {
-    aspectScore = 1.8; // Square document
-  } else if (aspect > 1.30 && aspect <= 2.2) {
-    aspectScore = 2.0; // Open two-page spread or landscape document
+  if (aspect >= 1.25 && aspect <= 1.85) {
+    aspectScore = 2.6; // Standard ID Card landscape (1.586) or A4 landscape (1.414)
+  } else if (aspect >= 0.55 && aspect <= 0.88) {
+    aspectScore = 2.6; // Standard single portrait page (A4 portrait 0.707, book, document)
+  } else if (aspect > 0.88 && aspect <= 1.25) {
+    aspectScore = 1.4; // Square-ish document
   }
 
   // 4. Centrality: Documents are positioned near the center of the camera
@@ -387,87 +399,7 @@ double _evaluateRectangularity(List<Offset> pts) {
   return totalQuality / 4.0;
 }
 
-/// Extracts 4 extreme corners from a polygon approximation along diagonal axes relative to centroid.
-List<Offset>? _extractFourCornersFromPoly(
-  cv.VecPoint pts, {
-  required int width,
-  required int height,
-}) {
-  final int count = pts.length;
-  if (count < 4) return null;
 
-  final List<Offset> points = <Offset>[
-    for (int i = 0; i < count; i++)
-      Offset(pts[i].x.toDouble(), pts[i].y.toDouble()),
-  ];
-
-  // Centroid
-  double cx = 0;
-  double cy = 0;
-  for (final Offset p in points) {
-    cx += p.dx;
-    cy += p.dy;
-  }
-  cx /= count;
-  cy /= count;
-
-  // Find 4 points maximizing projection into the 4 quadrants:
-  // NW (top-left): -dx - dy
-  // NE (top-right): +dx - dy
-  // SE (bottom-right): +dx + dy
-  // SW (bottom-left): -dx + dy
-  Offset? bestTL;
-  double scoreTL = -double.infinity;
-  Offset? bestTR;
-  double scoreTR = -double.infinity;
-  Offset? bestBR;
-  double scoreBR = -double.infinity;
-  Offset? bestBL;
-  double scoreBL = -double.infinity;
-
-  for (final Offset p in points) {
-    final double dx = p.dx - cx;
-    final double dy = p.dy - cy;
-
-    final double sTL = -dx - dy;
-    if (sTL > scoreTL) {
-      scoreTL = sTL;
-      bestTL = p;
-    }
-
-    final double sTR = dx - dy;
-    if (sTR > scoreTR) {
-      scoreTR = sTR;
-      bestTR = p;
-    }
-
-    final double sBR = dx + dy;
-    if (sBR > scoreBR) {
-      scoreBR = sBR;
-      bestBR = p;
-    }
-
-    final double sBL = -dx + dy;
-    if (sBL > scoreBL) {
-      scoreBL = sBL;
-      bestBL = p;
-    }
-  }
-
-  if (bestTL == null || bestTR == null || bestBR == null || bestBL == null) {
-    return null;
-  }
-
-  // Ensure 4 distinct corners
-  if (dist(bestTL, bestTR) < 12 ||
-      dist(bestTR, bestBR) < 12 ||
-      dist(bestBR, bestBL) < 12 ||
-      dist(bestBL, bestTL) < 12) {
-    return null;
-  }
-
-  return orderQuadPoints(<Offset>[bestTL, bestTR, bestBR, bestBL]);
-}
 
 double _polygonArea(List<Offset> pts) {
   if (pts.length < 3) return 0.0;
@@ -517,7 +449,21 @@ String warpPerspectiveSync(WarpArgs args) {
     matrix = cv.getPerspectiveTransform2f(srcPts, dstPts);
     warped = cv.warpPerspective(src, matrix, (outW, outH));
 
-    final bool ok = cv.imwrite(args.outputPath, warped);
+    // Auto-perimeter de-fringing (insets 1.8% to eliminate desk slivers & crop shadows)
+    final int ix = (outW * 0.018).round();
+    final int iy = (outH * 0.018).round();
+    final int cropW = outW - 2 * ix;
+    final int cropH = outH - 2 * iy;
+    final cv.Mat trimmed;
+    if (cropW > 20 && cropH > 20) {
+      final cv.Rect roi = cv.Rect(ix, iy, cropW, cropH);
+      trimmed = cv.Mat.fromMat(warped, roi: roi);
+    } else {
+      trimmed = warped.clone();
+    }
+
+    final bool ok = cv.imwrite(args.outputPath, trimmed);
+    trimmed.dispose();
     if (!ok) {
       throw StateError('Failed to write warped scan image.');
     }
@@ -618,6 +564,38 @@ String rotateImageFastSync(({String inputPath, String outputPath, int angle}) ar
   }
 }
 
+/// Photocopier S-Curve LUT: Deepens text to rich dark black ink while maintaining clean white paper.
+cv.Mat _buildPhotocopierLut() {
+  final List<int> table = List<int>.generate(256, (int i) {
+    if (i < 70) {
+      return (i * 0.50).round();
+    } else if (i < 140) {
+      return (35.0 + (i - 70) * 0.88).round();
+    } else if (i < 210) {
+      return (96.6 + (i - 140) * 1.30).round();
+    } else {
+      return math.min(255, (187.6 + (i - 210) * 1.50).round());
+    }
+  });
+  return cv.Mat.fromList(1, 256, cv.MatType.CV_8UC1, table);
+}
+
+/// Apple-grade Vivid LUT: Punchy contrast, deep blacks, and brilliant clean highlights.
+cv.Mat _buildVividLut() {
+  final List<int> table = List<int>.generate(256, (int i) {
+    if (i < 65) {
+      return (i * 0.45).round();
+    } else if (i < 145) {
+      return (29.25 + (i - 65) * 0.95).round();
+    } else if (i < 215) {
+      return (105.25 + (i - 145) * 1.30).round();
+    } else {
+      return math.min(255, (196.25 + (i - 215) * 1.45).round());
+    }
+  });
+  return cv.Mat.fromList(1, 256, cv.MatType.CV_8UC1, table);
+}
+
 /// Fast native OpenCV document filter processing — executed inside [Isolate.run].
 String applyScanFilterFastSync(({
   String inputPath,
@@ -642,75 +620,114 @@ String applyScanFilterFastSync(({
 
       case 'magicEnhance':
       case 'color':
-        // TRUE-COLOR DOCUMENT PIPELINE (CLAHE + Unsharp Mask on Bilateral Denoised):
-        // 1. Bilateral Denoising: Preserves text edges while eliminating CMOS sensor noise
-        final cv.Mat denoised = cv.bilateralFilter(src, 9, 75, 75);
+        // TRUE-COLOR PHOTOCOPIER PIPELINE (Reference Image 2 Match):
+        // 1. Bilateral Denoising: Preserves fine text and line art while suppressing sensor noise
+        final cv.Mat denoised = cv.bilateralFilter(src, 7, 35, 35);
 
-        // 2. LAB Color Space: Separates Luminance (L) from Chrominance (A: green-red, B: blue-yellow)
+        // 2. LAB Color Space: Separates Luminance (L) from Chrominance (A & B)
         final cv.Mat lab = cv.cvtColor(denoised, cv.COLOR_BGR2Lab);
         final cv.VecMat labChannels = cv.split(lab);
+        final cv.Mat lChannel = labChannels[0];
 
-        // 3. CLAHE on L channel only: Equalizes local illumination gradients without shifting colors
-        final cv.CLAHE clahe = cv.createCLAHE(clipLimit: 2.0, tileGridSize: (8, 8));
-        final cv.Mat lEnhanced = clahe.apply(labChannels[0]);
+        // 3. Illumination Normalization (Completely eliminates flash glare, shadows, and lighting gradients):
+        final int ksize = (math.max(src.cols, src.rows) * 0.10).round() | 1;
+        final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (ksize, ksize));
+        final cv.Mat bg = cv.morphologyEx(lChannel, cv.MORPH_DILATE, kernel);
+        final cv.Mat bgBlur = cv.gaussianBlur(bg, (ksize, ksize), 0);
+        final cv.Mat lDivided = cv.divide(lChannel, bgBlur, scale: 248.0);
+
+        // 4. Adaptive CLAHE for Crisp Local Contrast:
+        final int gridW = (src.cols ~/ 28).clamp(10, 20);
+        final int gridH = (src.rows ~/ 28).clamp(10, 20);
+        final cv.CLAHE clahe = cv.createCLAHE(clipLimit: 1.80, tileGridSize: (gridW, gridH));
+        final cv.Mat lEqualized = clahe.apply(lDivided);
+
+        // 5. Photocopier Deep Ink LUT:
+        // Deepens text strokes to rich black ink (matching reference image) and flattens paper to clean white
+        final cv.Mat lut = _buildPhotocopierLut();
+        final cv.Mat lFinal = cv.LUT(lEqualized, lut);
+
+        // 6. Chromatic Vibrance (+22% on A & B channels around neutral 128):
+        final cv.Mat aRich = cv.convertScaleAbs(labChannels[1], alpha: 1.22, beta: -28.16);
+        final cv.Mat bRich = cv.convertScaleAbs(labChannels[2], alpha: 1.22, beta: -28.16);
+
         final cv.VecMat mergedLab = cv.VecMat.fromList(<cv.Mat>[
-          lEnhanced,
-          labChannels[1],
-          labChannels[2],
+          lFinal,
+          aRich,
+          bRich,
         ]);
         final cv.Mat colorLab = cv.cvtColor(cv.merge(mergedLab), cv.COLOR_Lab2BGR);
 
-        // 4. Unsharp Mask: (0, 0), sigma 3.0, weighted 1.5 and -0.5 for crisp typography
-        blurMask = cv.gaussianBlur(colorLab, (0, 0), 3.0);
-        result = cv.addWeighted(colorLab, 1.5, blurMask, -0.5, 0);
+        // 7. Micro-Scale Typography Sharpening (Zero-Halo):
+        blurMask = cv.gaussianBlur(colorLab, (0, 0), 0.75);
+        result = cv.addWeighted(colorLab, 1.30, blurMask, -0.30, 0);
 
         denoised.dispose();
         lab.dispose();
         labChannels.dispose();
+        kernel.dispose();
+        bg.dispose();
+        bgBlur.dispose();
+        lDivided.dispose();
         clahe.dispose();
-        lEnhanced.dispose();
+        lEqualized.dispose();
+        lut.dispose();
+        lFinal.dispose();
+        aRich.dispose();
+        bRich.dispose();
         mergedLab.dispose();
         colorLab.dispose();
         break;
 
       case 'vivid':
         // APPLE-GRADE VIVID FILTER:
-        // Deep dimensional micro-contrast, selective chromatic saturation (+24%),
-        // and razor-sharp edge definition without blowing out skin tones or highlights.
-        final cv.Mat denoisedVivid = cv.bilateralFilter(src, 9, 75, 75);
-
-        // 1. Convert to LAB color space for clean chroma-luminance separation
+        final cv.Mat denoisedVivid = cv.bilateralFilter(src, 7, 35, 35);
         final cv.Mat labVivid = cv.cvtColor(denoisedVivid, cv.COLOR_BGR2Lab);
         final cv.VecMat labChs = cv.split(labVivid);
+        final cv.Mat lChVivid = labChs[0];
 
-        // 2. Punchy CLAHE on Luminance (L) channel
-        final cv.CLAHE claheVivid = cv.createCLAHE(clipLimit: 2.4, tileGridSize: (8, 8));
-        final cv.Mat lVivid = claheVivid.apply(labChs[0]);
+        // Illumination leveling
+        final int vKsize = (math.max(src.cols, src.rows) * 0.10).round() | 1;
+        final cv.Mat vKernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (vKsize, vKsize));
+        final cv.Mat vBg = cv.morphologyEx(lChVivid, cv.MORPH_DILATE, vKernel);
+        final cv.Mat vBgBlur = cv.gaussianBlur(vBg, (vKsize, vKsize), 0);
+        final cv.Mat vDivided = cv.divide(lChVivid, vBgBlur, scale: 248.0);
 
-        // 3. Apple Vibrance: boost A and B chromatic channels (+24% vibrance around neutral 128)
-        // Formula: alpha * x + beta, where beta = 128 * (1 - alpha) guarantees neutral 128 stays exact 128!
-        final cv.Mat aVivid = cv.convertScaleAbs(labChs[1], alpha: 1.24, beta: -30.72);
-        final cv.Mat bVivid = cv.convertScaleAbs(labChs[2], alpha: 1.24, beta: -30.72);
+        final int vGridW = (src.cols ~/ 28).clamp(10, 20);
+        final int vGridH = (src.rows ~/ 28).clamp(10, 20);
+        final cv.CLAHE claheVivid = cv.createCLAHE(clipLimit: 2.0, tileGridSize: (vGridW, vGridH));
+        final cv.Mat lVividEq = claheVivid.apply(vDivided);
+
+        // Vivid Deep Ink LUT
+        final cv.Mat vLut = _buildVividLut();
+        final cv.Mat lVividFinal = cv.LUT(lVividEq, vLut);
+
+        // Apple Vibrance (+26% on A & B around neutral 128)
+        final cv.Mat aVivid = cv.convertScaleAbs(labChs[1], alpha: 1.26, beta: -33.28);
+        final cv.Mat bVivid = cv.convertScaleAbs(labChs[2], alpha: 1.26, beta: -33.28);
 
         final cv.VecMat mergedVivid = cv.VecMat.fromList(<cv.Mat>[
-          lVivid,
+          lVividFinal,
           aVivid,
           bVivid,
         ]);
         final cv.Mat colorVivid = cv.cvtColor(cv.merge(mergedVivid), cv.COLOR_Lab2BGR);
 
-        // 4. Subtle Apple S-curve contrast boost
-        temp1 = cv.convertScaleAbs(colorVivid, alpha: 1.08, beta: -4);
-
-        // 5. High-Definition Unsharp Mask: sharp text, barcodes, and vibrant stamps
-        blurMask = cv.gaussianBlur(temp1, (0, 0), 2.5);
-        result = cv.addWeighted(temp1, 1.40, blurMask, -0.40, 0);
+        // Micro-unsharp mask
+        blurMask = cv.gaussianBlur(colorVivid, (0, 0), 0.75);
+        result = cv.addWeighted(colorVivid, 1.35, blurMask, -0.35, 0);
 
         denoisedVivid.dispose();
         labVivid.dispose();
         labChs.dispose();
+        vKernel.dispose();
+        vBg.dispose();
+        vBgBlur.dispose();
+        vDivided.dispose();
         claheVivid.dispose();
-        lVivid.dispose();
+        lVividEq.dispose();
+        vLut.dispose();
+        lVividFinal.dispose();
         aVivid.dispose();
         bVivid.dispose();
         mergedVivid.dispose();
@@ -720,7 +737,7 @@ String applyScanFilterFastSync(({
       case 'bw':
       case 'bwPrint':
         // ADAPTIVE THRESHOLD PHOTOCOPY:
-        final cv.Mat denoisedBw = cv.bilateralFilter(src, 9, 75, 75);
+        final cv.Mat denoisedBw = cv.bilateralFilter(src, 7, 30, 30);
         final cv.Mat grayBw = cv.cvtColor(denoisedBw, cv.COLOR_BGR2GRAY);
         result = cv.adaptiveThreshold(
           grayBw,
@@ -736,13 +753,17 @@ String applyScanFilterFastSync(({
 
       case 'grayscale':
       case 'gray':
-        // GRAYSCALE (CLAHE ON DENOISED LUMINANCE):
-        final cv.Mat denoisedGray = cv.bilateralFilter(src, 9, 75, 75);
+        // GRAYSCALE (CLAHE ON DENOISED LUMINANCE WITH ZERO-HALO SMOOTHING):
+        final cv.Mat denoisedGray = cv.bilateralFilter(src, 7, 30, 30);
         temp1 = cv.cvtColor(denoisedGray, cv.COLOR_BGR2GRAY);
-        final cv.CLAHE claheGray = cv.createCLAHE(clipLimit: 2.0, tileGridSize: (8, 8));
-        result = claheGray.apply(temp1);
+        final int gGridW = (src.cols ~/ 30).clamp(12, 24);
+        final int gGridH = (src.rows ~/ 30).clamp(12, 24);
+        final cv.CLAHE claheGray = cv.createCLAHE(clipLimit: 1.25, tileGridSize: (gGridW, gGridH));
+        final cv.Mat grayEq = claheGray.apply(temp1);
+        result = cv.convertScaleAbs(grayEq, alpha: 1.06, beta: 4);
         denoisedGray.dispose();
         claheGray.dispose();
+        grayEq.dispose();
         break;
 
       case 'lighten':
@@ -820,12 +841,13 @@ class ManualAdjust {
     cv.Mat result = cv.convertScaleAbs(input, alpha: contrast, beta: brightness);
 
     if (sharpness > 0) {
-      final cv.Mat gaussian = cv.gaussianBlur(result, (0, 0), 3.0);
+      final cv.Mat gaussian = cv.gaussianBlur(result, (0, 0), 1.0);
+      final double weight = (sharpness * 0.35).clamp(0.0, 0.70);
       final cv.Mat sharpened = cv.addWeighted(
         result,
-        1.0 + sharpness,
+        1.0 + weight,
         gaussian,
-        -sharpness,
+        -weight,
         0,
       );
       gaussian.dispose();

@@ -30,12 +30,12 @@ class PdfService {
       img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
 
       // ISO/IEC 7810 ID-1 standard card: 85.6mm x 53.98mm (ratio 1.586)
-      // Takes 58.0% of A4 width with generous, clean photocopier margins (Image 2 style)
-      const int targetCardW = 820;
-      const int targetCardH = 517;
-      const int cornerRadius = 28; // Standard card corner radius
+      // Takes 55.0% of A4 width with generous, clean photocopier margins (Image 2 style)
+      const int targetCardW = 778; // 55.0% of 1414
+      const int targetCardH = 490;
+      const int cornerRadius = 29; // Standard card corner radius (3.8% of card width)
 
-      final int dstX = ((a4Width - targetCardW) / 2).round(); // 297px left and right margin
+      final int dstX = ((a4Width - targetCardW) / 2).round(); // 318px left and right margin
 
       final img.Image? frontRaw = img.decodeImage(File(frontImagePath).readAsBytesSync());
       if (frontRaw != null) {
@@ -44,10 +44,10 @@ class PdfService {
           frontClean,
           width: targetCardW,
           height: targetCardH,
-          interpolation: img.Interpolation.linear,
+          interpolation: img.Interpolation.cubic,
         );
         final int frontY = (backImagePath != null && backImagePath.isNotEmpty)
-            ? 320
+            ? 250 // 12.5% of A4 height (matching reference Image 2)
             : ((a4Height - targetCardH) / 2).round();
         _drawRoundedCard(
           dst: canvas,
@@ -66,19 +66,19 @@ class PdfService {
             backClean,
             width: targetCardW,
             height: targetCardH,
-            interpolation: img.Interpolation.linear,
+            interpolation: img.Interpolation.cubic,
           );
           _drawRoundedCard(
             dst: canvas,
             src: backResized,
             dstX: dstX,
-            dstY: 1163,
+            dstY: 1070, // 53.5% of A4 height (matching reference Image 2)
             radius: cornerRadius,
           );
         }
       }
 
-      final Uint8List jpg = Uint8List.fromList(img.encodeJpg(canvas, quality: 94));
+      final Uint8List jpg = Uint8List.fromList(img.encodeJpg(canvas, quality: 96));
       File(outputPath).writeAsBytesSync(jpg, flush: true);
       return outputPath;
     });
