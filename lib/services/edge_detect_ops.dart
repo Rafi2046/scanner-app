@@ -564,22 +564,6 @@ String rotateImageFastSync(({String inputPath, String outputPath, int angle}) ar
   }
 }
 
-/// Photocopier S-Curve LUT: Deepens text to rich dark black ink while maintaining clean white paper.
-cv.Mat _buildPhotocopierLut() {
-  final List<int> table = List<int>.generate(256, (int i) {
-    if (i < 70) {
-      return (i * 0.50).round();
-    } else if (i < 140) {
-      return (35.0 + (i - 70) * 0.88).round();
-    } else if (i < 210) {
-      return (96.6 + (i - 140) * 1.30).round();
-    } else {
-      return math.min(255, (187.6 + (i - 210) * 1.50).round());
-    }
-  });
-  return cv.Mat.fromList(1, 256, cv.MatType.CV_8UC1, table);
-}
-
 /// Apple-grade Vivid LUT: Punchy contrast, deep blacks, and brilliant clean highlights.
 cv.Mat _buildVividLut() {
   final List<int> table = List<int>.generate(256, (int i) {
@@ -620,63 +604,46 @@ String applyScanFilterFastSync(({
 
       case 'magicEnhance':
       case 'color':
-        // TRUE-COLOR PHOTOCOPIER PIPELINE (Reference Image 2 Match):
-        // 1. Bilateral Denoising: Preserves fine text and line art while suppressing sensor noise
-        final cv.Mat denoised = cv.bilateralFilter(src, 7, 35, 35);
-
-        // 2. LAB Color Space: Separates Luminance (L) from Chrominance (A & B)
+        // Premium color scan for ID cards & docs.
+        // No morphology/divide bleach (that washed cards to white).
+        // Pipeline: denoise → mild CLAHE → soft contrast → light vibrance → crisp unsharp.
+        final cv.Mat denoised = cv.bilateralFilter(src, 5, 40, 40);
         final cv.Mat lab = cv.cvtColor(denoised, cv.COLOR_BGR2Lab);
         final cv.VecMat labChannels = cv.split(lab);
-        final cv.Mat lChannel = labChannels[0];
 
-        // 3. Illumination Normalization (Completely eliminates flash glare, shadows, and lighting gradients):
-        final int ksize = (math.max(src.cols, src.rows) * 0.10).round() | 1;
-        final cv.Mat kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (ksize, ksize));
-        final cv.Mat bg = cv.morphologyEx(lChannel, cv.MORPH_DILATE, kernel);
-        final cv.Mat bgBlur = cv.gaussianBlur(bg, (ksize, ksize), 0);
-        final cv.Mat lDivided = cv.divide(lChannel, bgBlur, scale: 248.0);
+        final cv.CLAHE clahe =
+            cv.createCLAHE(clipLimit: 1.35, tileGridSize: (8, 8));
+        final cv.Mat lEq = clahe.apply(labChannels[0]);
+        final cv.Mat lContrast =
+            cv.convertScaleAbs(lEq, alpha: 1.08, beta: 3);
 
-        // 4. Adaptive CLAHE for Crisp Local Contrast:
-        final int gridW = (src.cols ~/ 28).clamp(10, 20);
-        final int gridH = (src.rows ~/ 28).clamp(10, 20);
-        final cv.CLAHE clahe = cv.createCLAHE(clipLimit: 1.80, tileGridSize: (gridW, gridH));
-        final cv.Mat lEqualized = clahe.apply(lDivided);
+        // Keep card artwork colors; tiny vibrance only
+        final cv.Mat aCh =
+            cv.convertScaleAbs(labChannels[1], alpha: 1.06, beta: -7.68);
+        final cv.Mat bCh =
+            cv.convertScaleAbs(labChannels[2], alpha: 1.06, beta: -7.68);
 
-        // 5. Photocopier Deep Ink LUT:
-        // Deepens text strokes to rich black ink (matching reference image) and flattens paper to clean white
-        final cv.Mat lut = _buildPhotocopierLut();
-        final cv.Mat lFinal = cv.LUT(lEqualized, lut);
-
-        // 6. Chromatic Vibrance (+22% on A & B channels around neutral 128):
-        final cv.Mat aRich = cv.convertScaleAbs(labChannels[1], alpha: 1.22, beta: -28.16);
-        final cv.Mat bRich = cv.convertScaleAbs(labChannels[2], alpha: 1.22, beta: -28.16);
-
-        final cv.VecMat mergedLab = cv.VecMat.fromList(<cv.Mat>[
-          lFinal,
-          aRich,
-          bRich,
+        final cv.VecMat merged = cv.VecMat.fromList(<cv.Mat>[
+          lContrast,
+          aCh,
+          bCh,
         ]);
-        final cv.Mat colorLab = cv.cvtColor(cv.merge(mergedLab), cv.COLOR_Lab2BGR);
+        final cv.Mat color =
+            cv.cvtColor(cv.merge(merged), cv.COLOR_Lab2BGR);
 
-        // 7. Micro-Scale Typography Sharpening (Zero-Halo):
-        blurMask = cv.gaussianBlur(colorLab, (0, 0), 0.75);
-        result = cv.addWeighted(colorLab, 1.30, blurMask, -0.30, 0);
+        blurMask = cv.gaussianBlur(color, (0, 0), 0.85);
+        result = cv.addWeighted(color, 1.14, blurMask, -0.14, 0);
 
         denoised.dispose();
         lab.dispose();
         labChannels.dispose();
-        kernel.dispose();
-        bg.dispose();
-        bgBlur.dispose();
-        lDivided.dispose();
         clahe.dispose();
-        lEqualized.dispose();
-        lut.dispose();
-        lFinal.dispose();
-        aRich.dispose();
-        bRich.dispose();
-        mergedLab.dispose();
-        colorLab.dispose();
+        lEq.dispose();
+        lContrast.dispose();
+        aCh.dispose();
+        bCh.dispose();
+        merged.dispose();
+        color.dispose();
         break;
 
       case 'vivid':

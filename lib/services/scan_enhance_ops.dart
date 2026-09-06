@@ -52,25 +52,17 @@ Uint8List rotateJpegBytesIsolate(({
   );
 }
 
-/// CamScanner "Magic Enhance" → clear premium color scan without washing out.
-/// Levels light gently, keeps card colors/patterns, crisps text — not bleach-white.
+/// Magic Enhance (Dart fallback): clarity without paper-bleach.
 img.Image _magicColorFilter(img.Image src) {
-  final img.Image leveled = _processDocument(
+  // Avoid heavy background-division (washes ID card whites).
+  final img.Image contrast = img.adjustColor(
     src,
-    blackCut: 0.28,
-    whiteCut: 0.96,
-    isColor: true,
-    boostSaturation: true,
-    satFactor: 1.12,
-    maxDelta: 72,
+    contrast: 1.10,
+    saturation: 1.08,
+    brightness: 1.01,
   );
-  final img.Image punchy = img.adjustColor(
-    leveled,
-    contrast: 1.08,
-    saturation: 1.12,
-  );
-  final img.Image deepInk = _deepenInk(punchy, lumaCut: 68, amount: 0.12);
-  return _unsharpMaskDart(deepInk, amount: 0.38, clampDelta: 18);
+  final img.Image deepInk = _deepenInk(contrast, lumaCut: 55, amount: 0.08);
+  return _unsharpMaskDart(deepInk, amount: 0.32, clampDelta: 12);
 }
 
 /// Apple "Vivid" (True Color Vibrance & Micro-Contrast):

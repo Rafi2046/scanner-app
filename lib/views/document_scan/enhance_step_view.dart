@@ -1064,40 +1064,36 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
     }
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+      child: SizedBox(
         width: width,
         height: height,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(
-            color: isSelected ? _accent.withValues(alpha: 0.85) : Colors.black.withValues(alpha: 0.10),
-            width: isSelected ? 1.4 : 0.8,
-          ),
-          boxShadow: <BoxShadow>[
-            if (isSelected)
-              BoxShadow(
-                color: _accent.withValues(alpha: 0.35),
-                blurRadius: 10,
-                spreadRadius: 1.5,
-                offset: const Offset(0, 2),
-              ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isSelected ? 0.12 : 0.07),
-              blurRadius: isSelected ? 8 : 4,
-              offset: const Offset(0, 2),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF64748B)
+                  : Colors.black.withValues(alpha: 0.10),
+              width: isSelected ? 1.1 : 0.7,
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius - 0.5),
-          child: RotatedBox(
-            quarterTurns: draft.rotationTurns,
-            child: DocumentScanBeam(
-              trigger: _scanTrigger,
-              imagePath: draft.imagePath,
-              previousImagePath: _previousPath ?? draft.rawPath,
-              duration: const Duration(milliseconds: 1350),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(radius - 0.4),
+            child: RotatedBox(
+              quarterTurns: draft.rotationTurns,
+              // Plain image — no laser beam / cyan glow on print preview.
+              child: Image.file(
+                File(draft.imagePath),
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.high,
+                errorBuilder: (_, _, _) => ColoredBox(
+                  color: const Color(0xFFF1F5F9),
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.black.withValues(alpha: 0.25),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
