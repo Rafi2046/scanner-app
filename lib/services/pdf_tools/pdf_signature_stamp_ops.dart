@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+  import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:scanner_app/core/errors/app_exception.dart';

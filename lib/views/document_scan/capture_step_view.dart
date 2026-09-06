@@ -1,5 +1,6 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:scanner_app/core/enums/custom_scan_mode.dart';
@@ -23,6 +24,9 @@ import 'package:scanner_app/views/tools/compress_view.dart';
 import 'package:scanner_app/views/tools/merge_pdf_view.dart';
 import 'package:scanner_app/views/tools/password_lock_view.dart';
 import 'package:scanner_app/views/tools/pdf_to_image_view.dart';
+import 'package:scanner_app/providers/timestamp_provider.dart';
+import 'package:scanner_app/views/document_scan/widgets/draggable_timestamp_overlay.dart';
+import 'package:scanner_app/views/document_scan/widgets/edit_timestamp_bottom_sheet.dart';
 import 'package:scanner_app/views/tools/signature_view.dart';
 import 'package:scanner_app/views/tools/watermark_view.dart';
 
@@ -112,11 +116,17 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
     });
     final notifier = ref.read(customScanNotifierProvider.notifier);
     switch (mode) {
-      case ScanTabMode.scan: notifier.startSession(CustomScanMode.document);
-      case ScanTabMode.idCards: notifier.startSession(CustomScanMode.idCard);
-      case ScanTabMode.text: _push(const OcrResultView());
-      case ScanTabMode.sign: _push(const SignatureView());
-      case ScanTabMode.toWord: _push(const PdfToImageView());
+      case ScanTabMode.timestamp:
+      case ScanTabMode.scan:
+        notifier.startSession(CustomScanMode.document);
+      case ScanTabMode.idCards:
+        notifier.startSession(CustomScanMode.idCard);
+      case ScanTabMode.text:
+        _push(const OcrResultView());
+      case ScanTabMode.sign:
+        _push(const SignatureView());
+      case ScanTabMode.toWord:
+        _push(const PdfToImageView());
       case ScanTabMode.questionSet:
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Question Set active.')));
     }
@@ -128,10 +138,19 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
     try {
       final ScanQuad? live = _detectedQuad;
       await _camera.stopImageStream();
-      final String path = await action();
+      final String rawPath = await action();
       _flashMode = FlashMode.off;
       await _camera.setFlash(FlashMode.off);
-      await notifier.onRawCaptured(path, liveQuad: live);
+
+      String finalPath = rawPath;
+      if (_tabMode == ScanTabMode.timestamp) {
+        finalPath = await ref.read(timestampStampServiceProvider).stampImage(
+              imagePath: rawPath,
+              config: ref.read(timestampConfigProvider),
+            );
+      }
+
+      await notifier.onRawCaptured(finalPath, liveQuad: live);
     } on ScannerCancelledException {
       notifier.cancelBusy();
     } catch (error) {
@@ -211,64 +230,116 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
             },
             flashMode: _flashMode,
             onFlashToggle: _toggleFlash,
+            onFilterTap: _tabMode == ScanTabMode.timestamp
+                ? () => EditTimestampBottomSheet.show(context)
+                : null,
           ),
           Expanded(
-            child: Stack(
-              children: <Widget>[
-                ScanCameraViewfinder(
-                  controller: _camera.controller!,
-                  aspectRatio: _camera.previewAspectRatio,
-                  isId: isId,
-                  isBatch: _isBatch,
-                  normalizedQuad: _detectedQuad,
-                  onBatchToggle: (bool val) => setState(() => _isBatch = val),
-                  onFocusTap: (Offset pos, Size size) {
-                    _camera.triggerFocus(screenPoint: pos, viewSize: size);
-                  },
-                ),
-                if (isId)
-                  Positioned(
-                    top: 14,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: GestureDetector(
-                        onTap: () => setState(() => _inIdCardCamera = false),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.72),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white24, width: 1.0),
-                            boxShadow: <BoxShadow>[
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.45),
-                                blurRadius: 8,
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final Size viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
+                return Stack(
+                  children: <Widget>[
+                    ScanCameraViewfinder(
+                      controller: _camera.controller!,
+                      aspectRatio: _camera.previewAspectRatio,
+                      isId: isId,
+                      isBatch: _isBatch,
+                      normalizedQuad: _detectedQuad,
+                      onBatchToggle: (bool val) => setState(() => _isBatch = val),
+                      onFocusTap: (Offset pos, Size size) {
+                        _camera.triggerFocus(screenPoint: pos, viewSize: size);
+                      },
+                    ),
+                    if (isId)
+                      Positioned(
+                        top: 14,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _inIdCardCamera = false),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white24, width: 1.0),
+                                boxShadow: <BoxShadow>[
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.45),
+                                    blurRadius: 8,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              const Icon(LucideIcons.creditCard, size: 14, color: Color(0xFF00C292)),
-                              const SizedBox(width: 7),
-                              Text(
-                                '${scan.idCategory.title} • ${scan.idSide == IdScanSide.front ? (scan.idCategory.isSingleSide ? "Document" : "Front Side") : "Back Side"}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  const Icon(LucideIcons.creditCard, size: 14, color: Color(0xFF00C292)),
+                                  const SizedBox(width: 7),
+                                  Text(
+                                    '${scan.idCategory.title} • ${scan.idSide == IdScanSide.front ? (scan.idCategory.isSingleSide ? "Document" : "Front Side") : "Back Side"}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  const Icon(LucideIcons.chevronDown, size: 13, color: Colors.white70),
+                                ],
                               ),
-                              const SizedBox(width: 5),
-                              const Icon(LucideIcons.chevronDown, size: 13, color: Colors.white70),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-              ],
+                    if (_tabMode == ScanTabMode.timestamp) ...<Widget>[
+                      DraggableTimestampOverlay(
+                        viewportSize: viewportSize,
+                      ),
+                      Positioned(
+                        right: 14,
+                        bottom: 50,
+                        child: GestureDetector(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            EditTimestampBottomSheet.show(context);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.75),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFF00C292), width: 1.2),
+                              boxShadow: <BoxShadow>[
+                                BoxShadow(
+                                  color: const Color(0xFF00C292).withValues(alpha: 0.35),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                Icon(LucideIcons.palette, size: 14, color: Color(0xFF00C292)),
+                                SizedBox(width: 5),
+                                Text(
+                                  'Templates',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 6),

@@ -8,6 +8,7 @@ import 'package:scanner_app/services/pdf_service.dart';
 import 'package:scanner_app/services/pdf_tools_service.dart';
 import 'package:scanner_app/services/scan_enhance_service.dart';
 import 'package:scanner_app/services/storage_service.dart';
+import 'package:scanner_app/services/timestamp_stamp_service.dart';
 
 part 'service_providers.g.dart';
 
@@ -51,3 +52,6 @@ EdgeDetectService edgeDetectService(EdgeDetectServiceRef ref) =>
 @Riverpod(keepAlive: true)
 ScanEnhanceService scanEnhanceService(ScanEnhanceServiceRef ref) =>
     const ScanEnhanceService();
+
+final timestampStampServiceProvider =
+    Provider<TimestampStampService>((ref) => const TimestampStampService());

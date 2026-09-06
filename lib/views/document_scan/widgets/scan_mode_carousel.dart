@@ -3,10 +3,11 @@ import 'package:scanner_app/core/constants/app_constants.dart';
 
 /// Available modes in the horizontal camera tab bar.
 enum ScanTabMode {
-  text('Text'),
+  timestamp('Timestamp'),
+  text('Extract Text'),
   idCards('ID Cards'),
-  sign('Sign'),
   scan('Scan'),
+  sign('Sign'),
   toWord('To Word'),
   questionSet('Question Set');
 
