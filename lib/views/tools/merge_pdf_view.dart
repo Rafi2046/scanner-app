@@ -12,6 +12,7 @@ import 'package:scanner_app/providers/library_provider.dart';
 import 'package:scanner_app/providers/pdf_tools_provider.dart';
 import 'package:scanner_app/services/document_share_helper.dart';
 import 'package:scanner_app/views/preview/document_preview_view.dart';
+import 'package:scanner_app/views/tools/widgets/merge_library_picker_sheet.dart';
 import 'package:scanner_app/views/widgets/loading_overlay.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
@@ -148,198 +149,31 @@ class _MergePdfViewState extends ConsumerState<MergePdfView> {
       return;
     }
 
-    final Set<String> selectedDocIds = <String>{};
-
-    showModalBottomSheet<void>(
+    MergeLibraryPickerSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (BuildContext sheetCtx) {
-        return StatefulBuilder(
-          builder: (BuildContext ctx, StateSetter setSheetState) {
-            return Container(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.75,
-              ),
-              decoration: const BoxDecoration(
-                color: AppTheme.surfaceColor,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        margin: const EdgeInsets.only(top: 10, bottom: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFD1D5DB),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: <Widget>[
-                          const Text(
-                            'Select from App Scans',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setSheetState(() {
-                                if (selectedDocIds.length == docs.length) {
-                                  selectedDocIds.clear();
-                                } else {
-                                  selectedDocIds.addAll(
-                                    docs.map((ScannedDocument d) => d.id),
-                                  );
-                                }
-                              });
-                            },
-                            child: Text(
-                              selectedDocIds.length == docs.length
-                                  ? 'Deselect All'
-                                  : 'Select All',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(
-                      height: 1,
-                      thickness: 0.8,
-                      color: AppTheme.cardBorder,
-                    ),
-                    Flexible(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        shrinkWrap: true,
-                        itemCount: docs.length,
-                        itemBuilder: (BuildContext _, int index) {
-                          final ScannedDocument doc = docs[index];
-                          final bool isSelected =
-                              selectedDocIds.contains(doc.id);
-                          return CheckboxListTile(
-                            value: isSelected,
-                            activeColor: AppTheme.primary,
-                            title: Text(
-                              doc.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                            subtitle: Text(
-                              '${doc.pageCount} ${doc.pageCount == 1 ? "page" : "pages"}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppTheme.textSecondary,
-                              ),
-                            ),
-                            onChanged: (bool? val) {
-                              setSheetState(() {
-                                if (val == true) {
-                                  selectedDocIds.add(doc.id);
-                                } else {
-                                  selectedDocIds.remove(doc.id);
-                                }
-                              });
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    const Divider(
-                      height: 1,
-                      thickness: 0.8,
-                      color: AppTheme.cardBorder,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primary,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: selectedDocIds.isEmpty
-                              ? null
-                              : () {
-                                  Navigator.of(sheetCtx).pop();
-                                  final List<MergePdfItem> newItems =
-                                      <MergePdfItem>[];
-                                  for (final ScannedDocument doc in docs) {
-                                    if (selectedDocIds.contains(doc.id)) {
-                                      int size = 0;
-                                      try {
-                                        size = File(doc.pdfPath!).lengthSync();
-                                      } catch (_) {}
-                                      newItems.add(
-                                        MergePdfItem(
-                                          id:
-                                              'doc_${doc.id}_${DateTime.now().microsecondsSinceEpoch}',
-                                          title: doc.title,
-                                          path: doc.pdfPath!,
-                                          pageCount: doc.pageCount,
-                                          fileSizeBytes: size,
-                                          thumbnailPath:
-                                              doc.imagePaths.isNotEmpty
-                                                  ? doc.imagePaths.first
-                                                  : null,
-                                          isFromDevice: false,
-                                        ),
-                                      );
-                                    }
-                                  }
-                                  setState(() {
-                                    _items.addAll(newItems);
-                                  });
-                                  HapticFeedback.lightImpact();
-                                },
-                          child: Text(
-                            selectedDocIds.isEmpty
-                                ? 'Select Documents'
-                                : 'Add ${selectedDocIds.length} ${selectedDocIds.length == 1 ? "Document" : "Documents"}',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
+      documents: docs,
+      onConfirm: (List<ScannedDocument> picked) {
+        final List<MergePdfItem> newItems = <MergePdfItem>[];
+        for (final ScannedDocument doc in picked) {
+          int size = 0;
+          try {
+            size = File(doc.pdfPath!).lengthSync();
+          } catch (_) {}
+          newItems.add(
+            MergePdfItem(
+              id: 'doc_${doc.id}_${DateTime.now().microsecondsSinceEpoch}',
+              title: doc.title,
+              path: doc.pdfPath!,
+              pageCount: doc.pageCount,
+              fileSizeBytes: size,
+              thumbnailPath:
+                  doc.imagePaths.isNotEmpty ? doc.imagePaths.first : null,
+              isFromDevice: false,
+            ),
+          );
+        }
+        setState(() => _items.addAll(newItems));
+        HapticFeedback.lightImpact();
       },
     );
   }
