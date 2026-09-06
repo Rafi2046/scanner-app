@@ -369,10 +369,11 @@ class IdCardTypeSelectorView extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 18),
-        itemCount: IdCardCategory.values.length,
+        itemCount: IdCardCategory.idCardsScreenCategories.length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (BuildContext context, int index) {
-          final IdCardCategory cat = IdCardCategory.values[index];
+          final IdCardCategory cat =
+              IdCardCategory.idCardsScreenCategories[index];
           final bool isSelected = cat == selectedCategory;
 
           return GestureDetector(

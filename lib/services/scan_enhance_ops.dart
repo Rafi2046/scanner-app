@@ -52,6 +52,27 @@ Uint8List rotateJpegBytesIsolate(({
   );
 }
 
+/// CamScanner "Magic Enhance" → clear premium color scan without washing out.
+/// Levels light gently, keeps card colors/patterns, crisps text — not bleach-white.
+img.Image _magicColorFilter(img.Image src) {
+  final img.Image leveled = _processDocument(
+    src,
+    blackCut: 0.28,
+    whiteCut: 0.96,
+    isColor: true,
+    boostSaturation: true,
+    satFactor: 1.12,
+    maxDelta: 72,
+  );
+  final img.Image punchy = img.adjustColor(
+    leveled,
+    contrast: 1.08,
+    saturation: 1.12,
+  );
+  final img.Image deepInk = _deepenInk(punchy, lumaCut: 68, amount: 0.12);
+  return _unsharpMaskDart(deepInk, amount: 0.38, clampDelta: 18);
+}
+
 /// Apple "Vivid" (True Color Vibrance & Micro-Contrast):
 img.Image _vividColorFilter(img.Image src) {
   final img.Image enhanced = _processDocument(
@@ -60,23 +81,11 @@ img.Image _vividColorFilter(img.Image src) {
     whiteCut: 0.94,
     isColor: true,
     boostSaturation: true,
+    satFactor: 1.18,
   );
-  final img.Image punchy = img.adjustColor(enhanced, saturation: 1.25, contrast: 1.08);
-  return _unsharpMaskDart(punchy, amount: 0.28);
-}
-
-/// CamScanner "Magic Enhance" (Color Document):
-/// Safe background leveling + contrast stretch + subtle sharpening preserving genuine colors.
-img.Image _magicColorFilter(img.Image src) {
-  final img.Image enhanced = _processDocument(
-    src,
-    blackCut: 0.26,
-    whiteCut: 0.90,
-    isColor: true,
-    boostSaturation: true,
-  );
-  final img.Image punchy = img.adjustColor(enhanced, saturation: 1.12, contrast: 1.06);
-  return _unsharpMaskDart(punchy, amount: 0.25);
+  final img.Image punchy =
+      img.adjustColor(enhanced, saturation: 1.22, contrast: 1.10);
+  return _unsharpMaskDart(punchy, amount: 0.32, clampDelta: 18);
 }
 
 /// CamScanner "No Shadow": Soft shadow flattening, preserving fine handwriting and stamps.
@@ -167,6 +176,8 @@ img.Image _processDocument(
   required double whiteCut,
   required bool isColor,
   required bool boostSaturation,
+  double satFactor = 1.08,
+  double maxDelta = 120,
 }) {
   final int w = src.width;
   final int h = src.height;
@@ -174,7 +185,8 @@ img.Image _processDocument(
   final Uint8List luma = _computeLuminance(src, w, h);
   const int gridCols = 24;
   const int gridRows = 32;
-  final Float32List bgGrid = _estimateBackgroundGrid(luma, w, h, gridCols, gridRows);
+  final Float32List bgGrid =
+      _estimateBackgroundGrid(luma, w, h, gridCols, gridRows);
 
   final img.Image dst = img.Image(width: w, height: h);
 
@@ -195,7 +207,8 @@ img.Image _processDocument(
       final double b10 = bgGrid[gy0 * gridCols + gx1];
       final double b01 = bgGrid[gy1 * gridCols + gx0];
       final double b11 = bgGrid[gy1 * gridCols + gx1];
-      final double bg = (b00 + tx * (b10 - b00)) + ty * ((b01 + tx * (b11 - b01)) - (b00 + tx * (b10 - b00)));
+      final double bg = (b00 + tx * (b10 - b00)) +
+          ty * ((b01 + tx * (b11 - b01)) - (b00 + tx * (b10 - b00)));
 
       final int curLuma = luma[rowOff + x];
       final double ratio = curLuma / (bg > 12.0 ? bg : 12.0);
@@ -204,23 +217,23 @@ img.Image _processDocument(
       if (ratio >= whiteCut) {
         targetLuma = 255.0;
       } else if (ratio <= blackCut) {
-        targetLuma = (ratio / blackCut) * 8.0;
+        targetLuma = (ratio / blackCut) * 10.0;
       } else {
         final double t = (ratio - blackCut) / (whiteCut - blackCut);
         final double curve = t * t * (3.0 - 2.0 * t);
-        targetLuma = 8.0 + curve * (255.0 - 8.0);
+        targetLuma = 10.0 + curve * (248.0 - 10.0);
       }
 
       if (isColor) {
         final img.Pixel p = src.getPixel(x, y);
-        final double delta = (targetLuma - curLuma).clamp(-120.0, 120.0);
+        final double delta =
+            (targetLuma - curLuma).clamp(-maxDelta, maxDelta);
         double r = (p.r + delta).clamp(0.0, 255.0);
         double g = (p.g + delta).clamp(0.0, 255.0);
         double b = (p.b + delta).clamp(0.0, 255.0);
 
         if (boostSaturation) {
           final double finalLuma = 0.299 * r + 0.587 * g + 0.114 * b;
-          const double satFactor = 1.08;
           r = finalLuma + (r - finalLuma) * satFactor;
           g = finalLuma + (g - finalLuma) * satFactor;
           b = finalLuma + (b - finalLuma) * satFactor;
@@ -243,8 +256,45 @@ img.Image _processDocument(
   return dst;
 }
 
-/// Applies a zero-halo high-definition edge enhancement without discrete noise amplification.
-img.Image _unsharpMaskDart(img.Image src, {required double amount}) {
+/// Slightly darken ink / dark text without crushing photo shadows.
+img.Image _deepenInk(
+  img.Image src, {
+  required int lumaCut,
+  required double amount,
+}) {
+  final int w = src.width;
+  final int h = src.height;
+  final img.Image dst = img.Image(width: w, height: h);
+  for (int y = 0; y < h; y++) {
+    for (int x = 0; x < w; x++) {
+      final img.Pixel p = src.getPixel(x, y);
+      final int r = p.r.toInt();
+      final int g = p.g.toInt();
+      final int b = p.b.toInt();
+      final int luma = (299 * r + 587 * g + 114 * b) ~/ 1000;
+      if (luma <= lumaCut) {
+        final double t = (1.0 - luma / lumaCut) * amount;
+        dst.setPixelRgb(
+          x,
+          y,
+          (r * (1.0 - t)).round().clamp(0, 255),
+          (g * (1.0 - t)).round().clamp(0, 255),
+          (b * (1.0 - t)).round().clamp(0, 255),
+        );
+      } else {
+        dst.setPixelRgb(x, y, r, g, b);
+      }
+    }
+  }
+  return dst;
+}
+
+/// Zero-halo edge enhancement for crisp text without tearing patterns.
+img.Image _unsharpMaskDart(
+  img.Image src, {
+  required double amount,
+  double clampDelta = 16,
+}) {
   final int w = src.width;
   final int h = src.height;
   final img.Image dst = img.Image(width: w, height: h);
@@ -263,15 +313,13 @@ img.Image _unsharpMaskDart(img.Image src, {required double amount}) {
       final img.Pixel lft = src.getPixel(xm1, y);
       final img.Pixel rgt = src.getPixel(xp1, y);
 
-      // Smooth 5-point local average
       final double avgR = (c.r + top.r + bot.r + lft.r + rgt.r) / 5.0;
       final double avgG = (c.g + top.g + bot.g + lft.g + rgt.g) / 5.0;
       final double avgB = (c.b + top.b + bot.b + lft.b + rgt.b) / 5.0;
 
-      // High-frequency detail difference, clamped to avoid tearing/halos
-      final double diffR = (c.r - avgR).clamp(-16.0, 16.0);
-      final double diffG = (c.g - avgG).clamp(-16.0, 16.0);
-      final double diffB = (c.b - avgB).clamp(-16.0, 16.0);
+      final double diffR = (c.r - avgR).clamp(-clampDelta, clampDelta);
+      final double diffG = (c.g - avgG).clamp(-clampDelta, clampDelta);
+      final double diffB = (c.b - avgB).clamp(-clampDelta, clampDelta);
 
       final int nr = (c.r + amount * diffR).round().clamp(0, 255);
       final int ng = (c.g + amount * diffG).round().clamp(0, 255);

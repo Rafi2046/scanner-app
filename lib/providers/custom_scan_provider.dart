@@ -42,7 +42,14 @@ class CustomScanNotifier extends _$CustomScanNotifier {
     bool enterIdCamera = false,
   }) {
     _filterCache.clear();
-    final IdCardCategory cat = idCategory ?? state.idCategory;
+    IdCardCategory cat = idCategory ?? state.idCategory;
+    // ID Cards picker only lists card-shaped types; Tools shortcuts (e.g. Passport)
+    // keep their category when enterIdCamera is true.
+    if (mode == CustomScanMode.idCard &&
+        !enterIdCamera &&
+        !cat.showsOnIdCardsScreen) {
+      cat = IdCardCategory.idCard;
+    }
     state = CustomScanState(
       mode: mode,
       idSide: IdScanSide.front,

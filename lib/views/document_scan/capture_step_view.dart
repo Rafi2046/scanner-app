@@ -369,10 +369,11 @@ class _CaptureStepViewState extends ConsumerState<CaptureStepView> {
             ),
           ),
           const SizedBox(height: 6),
-          ScanModeCarousel(
-            selectedMode: carouselMode,
-            onModeSelected: _onModeChanged,
-          ),
+          if (!scan.skipIdTypePicker)
+            ScanModeCarousel(
+              selectedMode: carouselMode,
+              onModeSelected: _onModeChanged,
+            ),
           ScanShutterBar(
             enabled: !scan.busy,
             onShutter: () => _capture(_camera.takePicture),

@@ -956,7 +956,7 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
           sheetW = sheetH / 1.414;
         }
 
-        // Exact 55% card width matching reference photocopy (Image 2)
+        // 55% card width — clean photocopy margins on A4.
         final double cardW = sheetW * 0.55;
         final double cardH = cardW / 1.586;
         final double cardRadius = math.max(6.0, cardW * 0.038);
@@ -989,14 +989,15 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                       onTap: () {
                         setState(() => _selectedIdSideIndex = 0);
                         if (frontDraft != null) {
-                          ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
+                          ref
+                              .read(customScanNotifierProvider.notifier)
+                              .selectPage(scan.pages.indexOf(frontDraft));
                         }
                       },
                     ),
                   )
                 : Stack(
                     children: <Widget>[
-                      // Front Card (Top, centered horizontally at y = 12.5%):
                       Positioned(
                         top: sheetH * 0.125,
                         left: (sheetW - cardW) / 2,
@@ -1009,12 +1010,13 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                           onTap: () {
                             setState(() => _selectedIdSideIndex = 0);
                             if (frontDraft != null) {
-                              ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(frontDraft));
+                              ref
+                                  .read(customScanNotifierProvider.notifier)
+                                  .selectPage(scan.pages.indexOf(frontDraft));
                             }
                           },
                         ),
                       ),
-                      // Back Card (Bottom, centered horizontally at y = 53.5%):
                       Positioned(
                         top: sheetH * 0.535,
                         left: (sheetW - cardW) / 2,
@@ -1027,7 +1029,11 @@ class _EnhanceStepViewState extends ConsumerState<EnhanceStepView> {
                                 isSelected: _selectedIdSideIndex == 1,
                                 onTap: () {
                                   setState(() => _selectedIdSideIndex = 1);
-                                  ref.read(customScanNotifierProvider.notifier).selectPage(scan.pages.indexOf(backDraft));
+                                  ref
+                                      .read(customScanNotifierProvider.notifier)
+                                      .selectPage(
+                                        scan.pages.indexOf(backDraft),
+                                      );
                                 },
                               )
                             : _buildIdCardPlaceholder(

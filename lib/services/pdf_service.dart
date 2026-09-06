@@ -16,8 +16,7 @@ class PdfService {
 
   static const double _idCardGapPoints = 28;
 
-  /// Composes front (top) and optional back (bottom) ID images onto a pristine A4 white sheet JPEG (Image 2 style).
-  /// Automatically de-fringes edges (trims 2% camera shadow/desk artifacts) and applies smooth anti-aliased corners.
+  /// Composes front (top) and optional back (bottom) ID images onto A4 (clean photocopy layout).
   Future<String> createIdCardA4CompositeImage({
     required String frontImagePath,
     String? backImagePath,
@@ -26,72 +25,88 @@ class PdfService {
     return await Isolate.run(() {
       const int a4Width = 1414;
       const int a4Height = 2000;
+      // ISO ID-1 card at ~55% A4 width (premium photocopy margins).
+      const int targetCardW = 778;
+      const int targetCardH = 490;
+      const int cornerRadius = 29;
+      final int dstX = ((a4Width - targetCardW) / 2).round();
+
       final img.Image canvas = img.Image(width: a4Width, height: a4Height);
       img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
 
-      // ISO/IEC 7810 ID-1 standard card: 85.6mm x 53.98mm (ratio 1.586)
-      // Takes 55.0% of A4 width with generous, clean photocopier margins (Image 2 style)
-      const int targetCardW = 778; // 55.0% of 1414
-      const int targetCardH = 490;
-      const int cornerRadius = 29; // Standard card corner radius (3.8% of card width)
+      img.Image? prepare(String path) {
+        final img.Image? raw = img.decodeImage(File(path).readAsBytesSync());
+        if (raw == null) {
+          return null;
+        }
+        final img.Image clean = _cleanAndTrimCard(raw);
+        return _resizeCardIntoBox(clean, targetCardW, targetCardH);
+      }
 
-      final int dstX = ((a4Width - targetCardW) / 2).round(); // 318px left and right margin
+      final img.Image? frontCard = prepare(frontImagePath);
+      final bool hasBack = backImagePath != null &&
+          backImagePath.isNotEmpty &&
+          File(backImagePath).existsSync();
+      final img.Image? backCard = hasBack ? prepare(backImagePath) : null;
 
-      final img.Image? frontRaw = img.decodeImage(File(frontImagePath).readAsBytesSync());
-      if (frontRaw != null) {
-        final img.Image frontClean = _cleanAndTrimCard(frontRaw);
-        final img.Image frontResized = img.copyResize(
-          frontClean,
-          width: targetCardW,
-          height: targetCardH,
-          interpolation: img.Interpolation.cubic,
-        );
-        final int frontY = (backImagePath != null && backImagePath.isNotEmpty)
-            ? 250 // 12.5% of A4 height (matching reference Image 2)
-            : ((a4Height - targetCardH) / 2).round();
+      if (frontCard != null) {
+        final int frontY = backCard != null
+            ? 250
+            : ((a4Height - frontCard.height) / 2).round();
         _drawRoundedCard(
           dst: canvas,
-          src: frontResized,
-          dstX: dstX,
+          src: frontCard,
+          dstX: dstX + ((targetCardW - frontCard.width) / 2).round(),
           dstY: frontY,
           radius: cornerRadius,
         );
       }
-
-      if (backImagePath != null && backImagePath.isNotEmpty && File(backImagePath).existsSync()) {
-        final img.Image? backRaw = img.decodeImage(File(backImagePath).readAsBytesSync());
-        if (backRaw != null) {
-          final img.Image backClean = _cleanAndTrimCard(backRaw);
-          final img.Image backResized = img.copyResize(
-            backClean,
-            width: targetCardW,
-            height: targetCardH,
-            interpolation: img.Interpolation.cubic,
-          );
-          _drawRoundedCard(
-            dst: canvas,
-            src: backResized,
-            dstX: dstX,
-            dstY: 1070, // 53.5% of A4 height (matching reference Image 2)
-            radius: cornerRadius,
-          );
-        }
+      if (backCard != null) {
+        _drawRoundedCard(
+          dst: canvas,
+          src: backCard,
+          dstX: dstX + ((targetCardW - backCard.width) / 2).round(),
+          dstY: 1070,
+          radius: cornerRadius,
+        );
       }
 
-      final Uint8List jpg = Uint8List.fromList(img.encodeJpg(canvas, quality: 96));
+      final Uint8List jpg =
+          Uint8List.fromList(img.encodeJpg(canvas, quality: 96));
       File(outputPath).writeAsBytesSync(jpg, flush: true);
       return outputPath;
     });
   }
 
-  /// Trims 2.0% from the card perimeter to remove dirty desk slivers, crop shadows, and rough fringes.
+  /// Fit card into max box without distorting aspect ratio.
+  static img.Image _resizeCardIntoBox(img.Image src, int maxW, int maxH) {
+    final double scale = math.min(maxW / src.width, maxH / src.height);
+    final int w = math.max(1, (src.width * scale).round());
+    final int h = math.max(1, (src.height * scale).round());
+    return img.copyResize(
+      src,
+      width: w,
+      height: h,
+      interpolation: img.Interpolation.cubic,
+    );
+  }
+
+  /// Mild edge trim — enough to drop desk fringe, not enough to lose text.
   static img.Image _cleanAndTrimCard(img.Image raw) {
-    final int insetX = math.max(3, (raw.width * 0.020).round());
-    final int insetY = math.max(3, (raw.height * 0.020).round());
+    final int insetX = math.max(2, (raw.width * 0.012).round());
+    final int insetY = math.max(2, (raw.height * 0.012).round());
     final int cropW = raw.width - (2 * insetX);
     final int cropH = raw.height - (2 * insetY);
-    if (cropW <= 20 || cropH <= 20) return raw;
-    return img.copyCrop(raw, x: insetX, y: insetY, width: cropW, height: cropH);
+    if (cropW <= 20 || cropH <= 20) {
+      return raw;
+    }
+    return img.copyCrop(
+      raw,
+      x: insetX,
+      y: insetY,
+      width: cropW,
+      height: cropH,
+    );
   }
 
   static void _drawRoundedCard({

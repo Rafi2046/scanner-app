@@ -53,6 +53,18 @@ enum IdCardCategory {
 
   bool get isSingleSide => sides == 1;
 
+  /// Categories shown on the in-app **ID Cards** picker (not Tools shortcuts).
+  /// Passport / certificates live under Tools, not this chip row.
+  static const List<IdCardCategory> idCardsScreenCategories =
+      <IdCardCategory>[
+    general,
+    driverLicense,
+    idCard,
+    bankCard,
+  ];
+
+  bool get showsOnIdCardsScreen => idCardsScreenCategories.contains(this);
+
   /// Default file name prefix when saved.
   String get filePrefix => switch (this) {
     general => 'General_ID',
